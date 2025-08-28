@@ -18,6 +18,7 @@ import (
 	"github.com/hyperledger/fabric-x-committer/api/protoblocktx"
 	"github.com/hyperledger/fabric-x-committer/api/protosigverifierservice"
 	"github.com/hyperledger/fabric-x-committer/api/types"
+	"github.com/hyperledger/fabric-x-committer/loadgen/workload"
 	"github.com/hyperledger/fabric-x-committer/service/verifier/policy"
 	"github.com/hyperledger/fabric-x-committer/utils/channel"
 	"github.com/hyperledger/fabric-x-committer/utils/connection"
@@ -27,8 +28,10 @@ import (
 	"github.com/hyperledger/fabric-x-committer/utils/test"
 )
 
-const testTimeout = 3 * time.Second
-const fakeTxID = "fake-id"
+const (
+	testTimeout = 3 * time.Second
+	fakeTxID    = "fake-id"
+)
 
 func TestNoVerificationKeySet(t *testing.T) {
 	t.Parallel()
@@ -67,7 +70,7 @@ func TestMinimalInput(t *testing.T) {
 
 	stream, _ := c.Client.StartStream(t.Context())
 
-	update, txSigner := defaultUpdate(t)
+	update, signers := defaultUpdate(t)
 
 	tx1 := &protoblocktx.Tx{
 		Namespaces: []*protoblocktx.TxNamespace{{
@@ -78,7 +81,7 @@ func TestMinimalInput(t *testing.T) {
 			}},
 		}},
 	}
-	s, _ := txSigner.SignNs(fakeTxID, tx1, 0)
+	s, _ := signers[1].SignNs(fakeTxID, tx1, 0)
 	tx1.Signatures = append(tx1.Signatures, s)
 
 	tx2 := &protoblocktx.Tx{
@@ -91,7 +94,7 @@ func TestMinimalInput(t *testing.T) {
 		}},
 	}
 
-	s, _ = txSigner.SignNs(fakeTxID, tx2, 0)
+	s, _ = signers[1].SignNs(fakeTxID, tx2, 0)
 	tx2.Signatures = append(tx2.Signatures, s)
 
 	tx3 := &protoblocktx.Tx{
@@ -103,7 +106,7 @@ func TestMinimalInput(t *testing.T) {
 			}},
 		}},
 	}
-	s, _ = txSigner.SignNs(fakeTxID, tx3, 0)
+	s, _ = signers[1].SignNs(fakeTxID, tx3, 0)
 	tx3.Signatures = append(tx3.Signatures, s)
 
 	err := stream.Send(&protosigverifierservice.Batch{
@@ -119,6 +122,22 @@ func TestMinimalInput(t *testing.T) {
 	ret, ok := readStream(t, stream, testTimeout)
 	require.True(t, ok)
 	require.Len(t, ret, 3)
+
+	tx4 := &protoblocktx.Tx{
+		Namespaces: []*protoblocktx.TxNamespace{{
+			NsId:      types.MetaNamespaceID,
+			NsVersion: 0,
+			ReadWrites: []*protoblocktx.ReadWrite{{
+				Key:   []byte("2"),
+				Value: nil,
+			}},
+		}},
+	}
+	s, _ = signers[0].SignNs(fakeTxID, tx4, 0)
+	tx4.Signatures = append(tx4.Signatures, s)
+
+	_, ok = readStream(t, stream, testTimeout)
+	require.False(t, ok)
 }
 
 func TestBadSignature(t *testing.T) {
@@ -411,22 +430,32 @@ func readStream(
 	return channel.NewReader(ctx, outputChan).Read()
 }
 
-func defaultUpdate(t *testing.T) (*protosigverifierservice.Update, *sigtest.NsSigner) {
+func defaultUpdate(t *testing.T) (*protosigverifierservice.Update, []*sigtest.NsSigner) {
 	t.Helper()
 	factory := sigtest.NewSignatureFactory(signature.Ecdsa)
-	signingKey, verificationKey := factory.NewKeys()
-	txSigner, _ := factory.NewSigner(signingKey)
+	nsTxSigningKey, nsTxVerificationKey := factory.NewKeys()
+	configBlock, err := workload.CreateDefaultConfigBlock(&workload.ConfigBlock{
+		MetaNamespaceVerificationKey: nsTxVerificationKey,
+	})
+	require.NoError(t, err)
+	nsTxSigner, _ := factory.NewSigner(nsTxSigningKey)
+
+	dataTxSigningKey, dataTxVerificationKey := factory.NewKeys()
+	dataTxSigner, _ := factory.NewSigner(dataTxSigningKey)
 	update := &protosigverifierservice.Update{
+		Config: &protoblocktx.ConfigTransaction{
+			Envelope: configBlock.Data.Data[0],
+		},
 		NamespacePolicies: &protoblocktx.NamespacePolicies{
 			Policies: []*protoblocktx.PolicyItem{
 				policy.MakePolicy(t, "1", &protoblocktx.NamespacePolicy{
-					PublicKey: verificationKey,
+					PublicKey: dataTxVerificationKey,
 					Scheme:    signature.Ecdsa,
 				}),
 			},
 		},
 	}
-	return update, txSigner
+	return update, []*sigtest.NsSigner{nsTxSigner, dataTxSigner}
 }
 
 func defaultConfig() *Config {

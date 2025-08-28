@@ -13,16 +13,20 @@ import (
 
 	"github.com/cockroachdb/errors"
 
+	"github.com/hyperledger/fabric-lib-go/bccsp/factory"
 	"github.com/hyperledger/fabric-x-committer/api/protoblocktx"
 	"github.com/hyperledger/fabric-x-committer/api/protosigverifierservice"
 	"github.com/hyperledger/fabric-x-committer/api/types"
 	"github.com/hyperledger/fabric-x-committer/service/verifier/policy"
 	"github.com/hyperledger/fabric-x-committer/utils"
 	"github.com/hyperledger/fabric-x-committer/utils/signature"
+	"github.com/hyperledger/fabric-x-common/common/channelconfig"
+	"github.com/hyperledger/fabric-x-common/protoutil"
 )
 
 type verifier struct {
 	verifiers atomic.Pointer[map[string]*signature.NsVerifier]
+	bundle    *channelconfig.Bundle
 }
 
 func newVerifier() *verifier {
@@ -41,6 +45,11 @@ func (v *verifier) updatePolicies(
 	if update == nil || (update.Config == nil && update.NamespacePolicies == nil) {
 		return nil
 	}
+
+	if err := v.updateBundle(update); err != nil {
+		return err
+	}
+
 	// We parse the policy during validation and mark transactions as invalid if parsing fails.
 	// While it is unlikely that policy parsing would fail at this stage, it could happen
 	// if the stored policy in the database is corrupted or maliciously altered, or if there is a
@@ -80,6 +89,23 @@ func parsePolicies(update *protosigverifierservice.Update) (map[string]*signatur
 		}
 	}
 	return newPolicies, nil
+}
+
+func (v *verifier) updateBundle(u *protosigverifierservice.Update) error {
+	if u.Config == nil {
+		return nil
+	}
+	envelope, err := protoutil.UnmarshalEnvelope(u.Config.Envelope)
+	if err != nil {
+		return errors.Wrap(err, "error unmarshalling envelope")
+	}
+	bundle, err := channelconfig.NewBundleFromEnvelope(envelope, factory.GetDefault())
+	if err != nil {
+		return errors.Wrap(err, "error parsing config")
+	}
+
+	v.bundle = bundle
+	return nil
 }
 
 func (v *verifier) verifyRequest(tx *protosigverifierservice.Tx) *protosigverifierservice.Response {
