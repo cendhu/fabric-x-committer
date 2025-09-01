@@ -265,7 +265,7 @@ func createTxNodeBatchForTest(
 		switch i % 2 {
 		case 0:
 			// even number txs are valid.
-			txNode.Signatures = [][]byte{[]byte("dummy")}
+			txNode.Signatures = []*protoblocktx.SignatureWithIdentity{{Signature: []byte("dummy")}}
 			expectedValidatedTxs = append(expectedValidatedTxs, txNode)
 		case 1:
 			// odd number txs are invalid. No signature means invalid transaction.

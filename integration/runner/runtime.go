@@ -387,9 +387,9 @@ func (c *CommitterRuntime) MakeAndSendTransactionsToOrderer(
 			Namespaces: namespaces,
 		}
 		if expectedStatus != nil && expectedStatus[i] == protoblocktx.Status_ABORTED_SIGNATURE_INVALID {
-			tx.Signatures = make([][]byte, len(namespaces))
+			tx.Signatures = make([]*protoblocktx.SignatureWithIdentity, len(namespaces))
 			for nsIdx := range namespaces {
-				tx.Signatures[nsIdx] = []byte("dummy")
+				tx.Signatures[nsIdx] = &protoblocktx.SignatureWithIdentity{Signature: []byte("dummy")}
 			}
 		}
 		txs[i] = c.TxBuilder.MakeTx(tx)

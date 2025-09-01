@@ -82,7 +82,7 @@ func TestMinimalInput(t *testing.T) {
 		}},
 	}
 	s, _ := signers[1].SignNs(fakeTxID, tx1, 0)
-	tx1.Signatures = append(tx1.Signatures, s)
+	tx1.Signatures = append(tx1.Signatures, &protoblocktx.SignatureWithIdentity{Signature: s})
 
 	tx2 := &protoblocktx.Tx{
 		Namespaces: []*protoblocktx.TxNamespace{{
@@ -95,7 +95,7 @@ func TestMinimalInput(t *testing.T) {
 	}
 
 	s, _ = signers[1].SignNs(fakeTxID, tx2, 0)
-	tx2.Signatures = append(tx2.Signatures, s)
+	tx2.Signatures = append(tx2.Signatures, &protoblocktx.SignatureWithIdentity{Signature: s})
 
 	tx3 := &protoblocktx.Tx{
 		Namespaces: []*protoblocktx.TxNamespace{{
@@ -107,7 +107,7 @@ func TestMinimalInput(t *testing.T) {
 		}},
 	}
 	s, _ = signers[1].SignNs(fakeTxID, tx3, 0)
-	tx3.Signatures = append(tx3.Signatures, s)
+	tx3.Signatures = append(tx3.Signatures, &protoblocktx.SignatureWithIdentity{Signature: s})
 
 	err := stream.Send(&protosigverifierservice.Batch{
 		Update: update,
@@ -134,7 +134,7 @@ func TestMinimalInput(t *testing.T) {
 		}},
 	}
 	s, _ = signers[0].SignNs(fakeTxID, tx4, 0)
-	tx4.Signatures = append(tx4.Signatures, s)
+	tx4.Signatures = append(tx4.Signatures, &protoblocktx.SignatureWithIdentity{Signature: s})
 
 	_, ok = readStream(t, stream, testTimeout)
 	require.False(t, ok)
@@ -162,7 +162,9 @@ func TestBadSignature(t *testing.T) {
 						{Key: make([]byte, 0)},
 					},
 				}},
-				Signatures: [][]byte{{0, 1, 2}},
+				Signatures: []*protoblocktx.SignatureWithIdentity{
+					{Signature: []byte{0}}, {Signature: []byte{1}}, {Signature: []byte{2}},
+				},
 			},
 		},
 		expectedStatus: protoblocktx.Status_ABORTED_SIGNATURE_INVALID,
@@ -183,10 +185,13 @@ func TestUpdatePolicies(t *testing.T) {
 		stream, err := c.Client.StartStream(t.Context())
 		require.NoError(t, err)
 
+		update, _ := defaultUpdate(t)
+
 		ns1Policy, _ := makePolicyItem(t, ns1)
 		ns2Policy, _ := makePolicyItem(t, ns2)
 		err = stream.Send(&protosigverifierservice.Batch{
 			Update: &protosigverifierservice.Update{
+				Config: update.Config,
 				NamespacePolicies: &protoblocktx.NamespacePolicies{
 					Policies: []*protoblocktx.PolicyItem{ns1Policy, ns2Policy},
 				},
@@ -203,8 +208,8 @@ func TestUpdatePolicies(t *testing.T) {
 					Policies: []*protoblocktx.PolicyItem{
 						p3,
 						policy.MakePolicy(t, ns2, &protoblocktx.NamespacePolicy{
-							PublicKey: []byte("bad-key"),
-							Scheme:    signature.Ecdsa,
+							Policy: []byte("bad-key"),
+							Scheme: signature.Ecdsa,
 						}),
 					},
 				},
@@ -222,10 +227,13 @@ func TestUpdatePolicies(t *testing.T) {
 		stream, err := c.Client.StartStream(t.Context())
 		require.NoError(t, err)
 
+		update, _ := defaultUpdate(t)
+
 		ns1Policy, ns1Signer := makePolicyItem(t, ns1)
 		ns2Policy, _ := makePolicyItem(t, ns2)
 		err = stream.Send(&protosigverifierservice.Batch{
 			Update: &protosigverifierservice.Update{
+				Config: update.Config,
 				NamespacePolicies: &protoblocktx.NamespacePolicies{
 					Policies: []*protoblocktx.PolicyItem{ns1Policy, ns2Policy},
 				},
@@ -267,6 +275,8 @@ func TestMultipleUpdatePolicies(t *testing.T) {
 	stream, err := c.Client.StartStream(t.Context())
 	require.NoError(t, err)
 
+	update, _ := defaultUpdate(t)
+
 	// Each policy update will update a unique namespace, and the common namespace.
 	updateCount := len(ns) - 1
 	uniqueNsSigners := make([]*sigtest.NsSigner, updateCount)
@@ -277,6 +287,7 @@ func TestMultipleUpdatePolicies(t *testing.T) {
 		commonNsPolicy, commonNsSigner := makePolicyItem(t, ns[len(ns)-1])
 		commonNsSigners[i] = commonNsSigner
 		p := &protosigverifierservice.Update{
+			Config: update.Config,
 			NamespacePolicies: &protoblocktx.NamespacePolicies{
 				Policies: []*protoblocktx.PolicyItem{uniqueNsPolicy, commonNsPolicy},
 			},
@@ -331,11 +342,11 @@ type testCase struct {
 
 func sign(t *testing.T, tx *protoblocktx.Tx, signers ...*sigtest.NsSigner) {
 	t.Helper()
-	tx.Signatures = make([][]byte, len(signers))
+	tx.Signatures = make([]*protoblocktx.SignatureWithIdentity, len(signers))
 	for i, s := range signers {
 		s, err := s.SignNs(fakeTxID, tx, i)
 		require.NoError(t, err)
-		tx.Signatures[i] = s
+		tx.Signatures[i] = &protoblocktx.SignatureWithIdentity{Signature: s}
 	}
 }
 
@@ -362,8 +373,8 @@ func makePolicyItem(t *testing.T, ns string) (*protoblocktx.PolicyItem, *sigtest
 	txSigner, err := factory.NewSigner(signingKey)
 	require.NoError(t, err)
 	p := policy.MakePolicy(t, ns, &protoblocktx.NamespacePolicy{
-		PublicKey: verificationKey,
-		Scheme:    signature.Ecdsa,
+		Policy: verificationKey,
+		Scheme: signature.Ecdsa,
 	})
 	return p, txSigner
 }
@@ -449,8 +460,8 @@ func defaultUpdate(t *testing.T) (*protosigverifierservice.Update, []*sigtest.Ns
 		NamespacePolicies: &protoblocktx.NamespacePolicies{
 			Policies: []*protoblocktx.PolicyItem{
 				policy.MakePolicy(t, "1", &protoblocktx.NamespacePolicy{
-					PublicKey: dataTxVerificationKey,
-					Scheme:    signature.Ecdsa,
+					Policy: dataTxVerificationKey,
+					Scheme: signature.Ecdsa,
 				}),
 			},
 		},

@@ -341,3 +341,25 @@ func flattenEndpoint(in map[string]any) *connection.Endpoint {
 	}
 	return &connection.Endpoint{Host: hostStr, Port: int(portFloat)}
 }
+
+// CreateSignatureSetsForThresholdRule creates a slice of SignatureSet pointers from individual threshold signatures.
+// Each signature provided is wrapped in its own SignatureWithIdentity and then placed
+// in its own new SignatureSet.
+func CreateSignatureSetsForThresholdRule(signatures ...[]byte) []*protoblocktx.SignatureSet {
+	// Pre-allocate the slice with the exact size for efficiency.
+	sets := make([]*protoblocktx.SignatureSet, 0, len(signatures))
+
+	for _, sig := range signatures {
+		if sig == nil {
+			continue // Or handle error appropriately
+		}
+
+		// Create the set for this single signature.
+		set := &protoblocktx.SignatureSet{
+			SignaturesWithIdentity: []*protoblocktx.SignatureWithIdentity{{Signature: sig}},
+		}
+		sets = append(sets, set)
+	}
+
+	return sets
+}

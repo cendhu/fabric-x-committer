@@ -57,13 +57,13 @@ func NewTxSignerVerifier(policy *PolicyProfile) *TxSignerVerifier {
 
 // Sign signs a TX.
 func (e *TxSignerVerifier) Sign(txID string, tx *protoblocktx.Tx) {
-	tx.Signatures = make([][]byte, len(tx.Namespaces))
+	tx.Signatures = make([]*protoblocktx.SignatureWithIdentity, len(tx.Namespaces))
 	for nsIndex, ns := range tx.Namespaces {
 		signer, ok := e.HashSigners[ns.NsId]
 		if !ok {
 			continue
 		}
-		tx.Signatures[nsIndex] = signer.Sign(txID, tx, nsIndex)
+		tx.Signatures[nsIndex] = &protoblocktx.SignatureWithIdentity{Signature: signer.Sign(txID, tx, nsIndex)}
 	}
 }
 
@@ -130,8 +130,8 @@ func (e *HashSignerVerifier) Verify(txID string, tx *protoblocktx.Tx, nsIndex in
 // GetVerificationPolicy returns the verification policy.
 func (e *HashSignerVerifier) GetVerificationPolicy() *protoblocktx.NamespacePolicy {
 	return &protoblocktx.NamespacePolicy{
-		Scheme:    e.scheme,
-		PublicKey: e.pubKey,
+		Scheme: e.scheme,
+		Policy: e.pubKey,
 	}
 }
 

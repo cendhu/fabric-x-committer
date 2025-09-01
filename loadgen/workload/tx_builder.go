@@ -96,7 +96,7 @@ func (txb *TxBuilder) makeTx(optionalTxID *string, blockTx *protoblocktx.Tx) *pr
 		txb.TxSigner.Sign(txID, blockTx)
 	case txb.TxSigner == nil:
 		// Otherwise, it puts empty signatures for all namespaces to ensure well-formed TX.
-		blockTx.Signatures = make([][]byte, len(blockTx.Namespaces))
+		blockTx.Signatures = make([]*protoblocktx.SignatureWithIdentity, len(blockTx.Namespaces))
 	}
 
 	//  3. Serializes the envelope's payload.

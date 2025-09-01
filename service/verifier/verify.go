@@ -21,6 +21,7 @@ import (
 	"github.com/hyperledger/fabric-x-committer/utils"
 	"github.com/hyperledger/fabric-x-committer/utils/signature"
 	"github.com/hyperledger/fabric-x-common/common/channelconfig"
+	"github.com/hyperledger/fabric-x-common/msp"
 	"github.com/hyperledger/fabric-x-common/protoutil"
 )
 
@@ -54,7 +55,7 @@ func (v *verifier) updatePolicies(
 	// While it is unlikely that policy parsing would fail at this stage, it could happen
 	// if the stored policy in the database is corrupted or maliciously altered, or if there is a
 	// bug in the committer that modifies the policy bytes.
-	newVerifiers, err := parsePolicies(update)
+	newVerifiers, err := createVerifiers(update, v.bundle.MSPManager())
 	if err != nil {
 		return errors.Join(ErrUpdatePolicies, err)
 	}
@@ -62,15 +63,28 @@ func (v *verifier) updatePolicies(
 	defer logger.Infof("New verification policies for namespaces %v", slices.Collect(maps.Keys(newVerifiers)))
 
 	for k, nsVerifier := range *v.verifiers.Load() {
-		if _, ok := newVerifiers[k]; !ok {
-			newVerifiers[k] = nsVerifier
+		_, ok := newVerifiers[k]
+		if ok {
+			continue
 		}
+
+		if update.Config != nil && nsVerifier.Type == protoblocktx.PolicyType_SIGNATURE_RULE {
+			nsVerifier, err = policy.CreateNamespaceVerifier(&protoblocktx.PolicyItem{
+				Namespace: k, Policy: nsVerifier.Policy,
+			}, v.bundle.MSPManager())
+			if err != nil {
+				return err
+			}
+		}
+		newVerifiers[k] = nsVerifier
 	}
 	v.verifiers.Store(&newVerifiers)
 	return nil
 }
 
-func parsePolicies(update *protosigverifierservice.Update) (map[string]*signature.NsVerifier, error) {
+func createVerifiers(
+	update *protosigverifierservice.Update, idDeserializer msp.IdentityDeserializer,
+) (map[string]*signature.NsVerifier, error) {
 	newPolicies := make(map[string]*signature.NsVerifier)
 	if update.Config != nil {
 		nsVerifier, err := policy.ParsePolicyFromConfigTx(update.Config.Envelope)
@@ -81,7 +95,7 @@ func parsePolicies(update *protosigverifierservice.Update) (map[string]*signatur
 	}
 	if update.NamespacePolicies != nil {
 		for _, pd := range update.NamespacePolicies.Policies {
-			nsVerifier, err := policy.ParseNamespacePolicyItem(pd)
+			nsVerifier, err := policy.CreateNamespaceVerifier(pd, idDeserializer)
 			if err != nil {
 				return nil, errors.Join(ErrUpdatePolicies, err)
 			}

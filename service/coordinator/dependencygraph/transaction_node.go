@@ -21,7 +21,7 @@ type (
 	// TransactionNode is a node in the dependency graph.
 	TransactionNode struct {
 		Tx         *protovcservice.Tx
-		Signatures [][]byte
+		Signatures []*protoblocktx.SignatureWithIdentity
 
 		// dependsOnTxs is a set of transactions that this transaction depends on.
 		// A transaction is eligible for validation once all the transactions

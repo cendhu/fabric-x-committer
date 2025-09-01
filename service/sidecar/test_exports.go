@@ -86,11 +86,11 @@ func MalformedTxTestCases(txb *workload.TxBuilder) (
 	}))
 	add(protoblocktx.Status_MALFORMED_MISSING_SIGNATURE, txb.MakeTx(&protoblocktx.Tx{
 		Namespaces: validTxNamespaces,
-		Signatures: make([][]byte, 0), // Not enough signatures.
+		Signatures: make([]*protoblocktx.SignatureWithIdentity, 0), // Not enough signatures.
 	}))
 	add(protoblocktx.Status_MALFORMED_MISSING_SIGNATURE, txb.MakeTx(&protoblocktx.Tx{
 		Namespaces: validTxNamespaces,
-		Signatures: make([][]byte, 2), // Too many signatures.
+		Signatures: make([]*protoblocktx.SignatureWithIdentity, 2), // Too many signatures.
 	}))
 	add(protoblocktx.Status_MALFORMED_NO_WRITES, txb.MakeTx(&protoblocktx.Tx{
 		Namespaces: []*protoblocktx.TxNamespace{{
@@ -248,8 +248,8 @@ func MalformedTxTestCases(txb *workload.TxBuilder) (
 
 func defaultNsInvalidPolicy() []byte {
 	nsPolicy, _ := proto.Marshal(&protoblocktx.NamespacePolicy{
-		Scheme:    signature.Ecdsa,
-		PublicKey: []byte("publicKey"),
+		Scheme: signature.Ecdsa,
+		Policy: []byte("publicKey"),
 	})
 	return nsPolicy
 }
@@ -258,8 +258,8 @@ func defaultNsValidPolicy() []byte {
 	factory := sigtest.NewSignatureFactory(signature.Ecdsa)
 	_, verificationKey := factory.NewKeys()
 	nsPolicy, _ := proto.Marshal(&protoblocktx.NamespacePolicy{
-		Scheme:    signature.Ecdsa,
-		PublicKey: verificationKey,
+		Scheme: signature.Ecdsa,
+		Policy: verificationKey,
 	})
 	return nsPolicy
 }
