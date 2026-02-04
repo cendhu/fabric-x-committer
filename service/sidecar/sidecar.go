@@ -71,7 +71,7 @@ func New(c *Config) (*Service, error) {
 
 	// 3. Deliver the block with status to client.
 	logger.Infof("Create ledger service for channel %s", c.Orderer.ChannelID)
-	ledgerService, err := newLedgerService(c.Orderer.ChannelID, c.Ledger.Path, metrics)
+	ledgerService, err := newLedgerService(c.Orderer.ChannelID, c.Ledger.Path, c.Ledger.SyncInterval, metrics)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ledger: %w", err)
 	}
@@ -89,7 +89,7 @@ func New(c *Config) (*Service, error) {
 		config:             c,
 		metrics:            metrics,
 		blockToBeCommitted: make(chan *common.Block, bufferSize),
-		committedBlock:     make(chan *common.Block, bufferSize),
+		committedBlock:     make(chan *common.Block, bufferSize*10),
 		statusQueue:        make(chan []*protonotify.TxStatusEvent, bufferSize),
 	}, nil
 }

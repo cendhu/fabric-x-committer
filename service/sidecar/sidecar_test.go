@@ -408,6 +408,7 @@ func TestSidecarRecovery(t *testing.T) {
 	env.sidecar.ledgerService, err = newLedgerService(
 		env.config.Orderer.ChannelID,
 		env.config.Ledger.Path,
+		0,
 		newPerformanceMetrics(),
 	)
 	require.NoError(t, err)
