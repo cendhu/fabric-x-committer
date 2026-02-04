@@ -8,6 +8,7 @@ package sidecar
 
 import (
 	"fmt"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/errors"
@@ -44,7 +45,120 @@ const (
 	statusIdx             = int(common.BlockMetadataIndex_TRANSACTIONS_FILTER)
 )
 
-func mapBlock(block *common.Block, txIDToHeight *utils.SyncMap[string, types.Height]) (*blockMappingResult, error) {
+// parsedEnvelope holds the result of pre-parsing a single transaction envelope.
+// The expensive operations (UnwrapEnvelopeLite, UnmarshalTx, verifyTxForm) are performed
+// in parallel across goroutines, and the results are consumed sequentially by mapBlock.
+type parsedEnvelope struct {
+	hdr        *serialization.EnvelopeHeader
+	tx         *protoblocktx.Tx
+	hdrErr     error
+	txErr      error
+	formStatus protoblocktx.Status
+}
+
+// parseJob is a unit of work sent to pre-created worker goroutines.
+// Each job processes a contiguous chunk of envelopes from a block.
+type parseJob struct {
+	data    [][]byte
+	results []parsedEnvelope
+	start   int
+	end     int
+	wg      *sync.WaitGroup
+}
+
+// txParser is a pool of pre-created worker goroutines that parse transaction
+// envelopes in parallel. Workers are created once and reused across all blocks,
+// avoiding repeated goroutine spawn/teardown overhead under sustained load.
+type txParser struct {
+	jobs    chan parseJob
+	workers int
+}
+
+func newTxParser(workers int) *txParser {
+	p := &txParser{
+		jobs:    make(chan parseJob),
+		workers: workers,
+	}
+	for range workers {
+		go func() {
+			for job := range p.jobs {
+				for i := job.start; i < job.end; i++ {
+					parseOneEnvelope(job.data[i], &job.results[i])
+				}
+				job.wg.Done()
+			}
+		}()
+	}
+	return p
+}
+
+func (p *txParser) close() {
+	close(p.jobs)
+}
+
+// minTxsForParallelParse is the minimum number of transactions in a block
+// before parallel parsing is used. Below this threshold, the synchronization
+// overhead exceeds the parallelism benefit.
+const minTxsForParallelParse = 200
+
+// parseBlockEnvelopes pre-parses all transaction envelopes.
+// When a txParser is provided and the block is large enough, it distributes the
+// work across pre-created worker goroutines. UnwrapEnvelopeLite, UnmarshalTx,
+// and verifyTxForm are all pure functions with no shared mutable state,
+// so they can safely run concurrently.
+func parseBlockEnvelopes(data [][]byte, parser *txParser) []parsedEnvelope {
+	n := len(data)
+	results := make([]parsedEnvelope, n)
+
+	if parser == nil || n < minTxsForParallelParse {
+		for i := range data {
+			parseOneEnvelope(data[i], &results[i])
+		}
+		return results
+	}
+
+	workers := parser.workers
+	if workers > n {
+		workers = n
+	}
+
+	var wg sync.WaitGroup
+	chunkSize := (n + workers - 1) / workers
+	for w := 0; w < workers; w++ {
+		start := w * chunkSize
+		end := start + chunkSize
+		if end > n {
+			end = n
+		}
+		wg.Add(1)
+		parser.jobs <- parseJob{
+			data:    data,
+			results: results,
+			start:   start,
+			end:     end,
+			wg:      &wg,
+		}
+	}
+	wg.Wait()
+	return results
+}
+
+func parseOneEnvelope(msg []byte, result *parsedEnvelope) {
+	result.hdr, result.hdrErr = serialization.UnwrapEnvelopeLite(msg)
+	if result.hdrErr != nil {
+		return
+	}
+	if common.HeaderType(result.hdr.HeaderType) != common.HeaderType_MESSAGE {
+		return
+	}
+	result.tx, result.txErr = serialization.UnmarshalTx(result.hdr.Data)
+	if result.txErr != nil {
+		return
+	}
+	result.formStatus = verifyTxForm(result.tx)
+}
+
+func mapBlock(block *common.Block, txIDToHeight *utils.SyncMap[string, types.Height], parser *txParser) (*blockMappingResult, error) {
 	// Prepare block's metadata.
 	if block.Metadata == nil {
 		block.Metadata = &common.BlockMetadata{}
@@ -81,9 +195,13 @@ func mapBlock(block *common.Block, txIDToHeight *utils.SyncMap[string, types.Hei
 		txIDToHeight: txIDToHeight,
 	}
 
-	for msgIndex, msg := range block.Data.Data {
+	// Stage 1: Parse all envelopes in parallel (pure computation, no shared state).
+	parsed := parseBlockEnvelopes(block.Data.Data, parser)
+
+	// Stage 2: Sequential mapping using pre-parsed results (shared state updates).
+	for msgIndex := range block.Data.Data {
 		logger.Debugf("Mapping transaction [blk,tx] = [%d,%d]", blockNumber, msgIndex)
-		err := mappedBlock.mapMessage(uint32(msgIndex), msg) //nolint:gosec // int -> uint32.
+		err := mappedBlock.mapParsedMessage(uint32(msgIndex), block.Data.Data[msgIndex], &parsed[msgIndex]) //nolint:gosec // int -> uint32.
 		if err != nil {
 			// This can never occur unless there is a bug in the relay.
 			return nil, err
@@ -92,13 +210,12 @@ func mapBlock(block *common.Block, txIDToHeight *utils.SyncMap[string, types.Hei
 	return mappedBlock, nil
 }
 
-func (b *blockMappingResult) mapMessage(msgIndex uint32, msg []byte) error {
-	envHdr, envErr := serialization.UnwrapEnvelopeLite(msg)
-	if envErr != nil {
-		return b.rejectNonDBStatusTx(msgIndex, "", 0, protoblocktx.Status_MALFORMED_BAD_ENVELOPE, envErr.Error())
+func (b *blockMappingResult) mapParsedMessage(msgIndex uint32, msg []byte, p *parsedEnvelope) error {
+	if p.hdrErr != nil {
+		return b.rejectNonDBStatusTx(msgIndex, "", 0, protoblocktx.Status_MALFORMED_BAD_ENVELOPE, p.hdrErr.Error())
 	}
-	txID := envHdr.TxId
-	headerType := envHdr.HeaderType
+	txID := p.hdr.TxId
+	headerType := p.hdr.HeaderType
 	if txID == "" || !utf8.ValidString(txID) {
 		return b.rejectNonDBStatusTx(msgIndex, txID, headerType, protoblocktx.Status_MALFORMED_MISSING_TX_ID, "no TX ID")
 	}
@@ -114,14 +231,13 @@ func (b *blockMappingResult) mapMessage(msgIndex uint32, msg []byte) error {
 		b.isConfig = true
 		return b.appendTx(msgIndex, txID, headerType, configTx(msg))
 	case common.HeaderType_MESSAGE:
-		tx, err := serialization.UnmarshalTx(envHdr.Data)
-		if err != nil {
-			return b.rejectTx(msgIndex, txID, headerType, protoblocktx.Status_MALFORMED_BAD_ENVELOPE_PAYLOAD, err.Error())
+		if p.txErr != nil {
+			return b.rejectTx(msgIndex, txID, headerType, protoblocktx.Status_MALFORMED_BAD_ENVELOPE_PAYLOAD, p.txErr.Error())
 		}
-		if status := verifyTxForm(tx); status != statusNotYetValidated {
-			return b.rejectTx(msgIndex, txID, headerType, status, "malformed tx")
+		if p.formStatus != statusNotYetValidated {
+			return b.rejectTx(msgIndex, txID, headerType, p.formStatus, "malformed tx")
 		}
-		return b.appendTx(msgIndex, txID, headerType, tx)
+		return b.appendTx(msgIndex, txID, headerType, p.tx)
 	}
 }
 
@@ -249,24 +365,25 @@ func verifyTxForm(tx *protoblocktx.Tx) protoblocktx.Status {
 		return protoblocktx.Status_MALFORMED_MISSING_SIGNATURE
 	}
 
-	nsIDs := make(map[string]any, len(tx.Namespaces))
-	for _, ns := range tx.Namespaces {
+	for i, ns := range tx.Namespaces {
 		// Checks that the application does not submit a config TX.
 		if ns.NsId == types.ConfigNamespaceID || policy.ValidateNamespaceID(ns.NsId) != nil {
 			return protoblocktx.Status_MALFORMED_NAMESPACE_ID_INVALID
 		}
-		if _, ok := nsIDs[ns.NsId]; ok {
-			return protoblocktx.Status_MALFORMED_DUPLICATE_NAMESPACE
-		}
-
-		for _, check := range []func(ns *protoblocktx.TxNamespace) protoblocktx.Status{
-			checkNamespaceFormation, checkMetaNamespace,
-		} {
-			if status := check(ns); status != statusNotYetValidated {
-				return status
+		// Check for duplicate namespace IDs using O(n²) comparison.
+		// Typical transactions have very few namespaces (1-3).
+		for _, prev := range tx.Namespaces[:i] {
+			if ns.NsId == prev.NsId {
+				return protoblocktx.Status_MALFORMED_DUPLICATE_NAMESPACE
 			}
 		}
-		nsIDs[ns.NsId] = nil
+
+		if status := checkNamespaceFormation(ns); status != statusNotYetValidated {
+			return status
+		}
+		if status := checkMetaNamespace(ns); status != statusNotYetValidated {
+			return status
+		}
 	}
 	return statusNotYetValidated
 }
@@ -276,7 +393,16 @@ func checkNamespaceFormation(ns *protoblocktx.TxNamespace) protoblocktx.Status {
 		return protoblocktx.Status_MALFORMED_NO_WRITES
 	}
 
-	keys := make([][]byte, 0, len(ns.ReadsOnly)+len(ns.ReadWrites)+len(ns.BlindWrites))
+	// Collect keys into a stack-allocated array to avoid heap allocation.
+	// Typical namespaces have only a few keys, so 32 is more than enough.
+	total := len(ns.ReadsOnly) + len(ns.ReadWrites) + len(ns.BlindWrites)
+	var buf [32][]byte
+	var keys [][]byte
+	if total <= len(buf) {
+		keys = buf[:0]
+	} else {
+		keys = make([][]byte, 0, total)
+	}
 	for _, r := range ns.ReadsOnly {
 		keys = append(keys, r.Key)
 	}
@@ -322,16 +448,17 @@ func checkMetaNamespace(txNs *protoblocktx.TxNamespace) protoblocktx.Status {
 }
 
 // checkKeys verifies there are no duplicate keys and no nil keys.
+// For small key sets (≤16), it uses O(n²) comparison to avoid map allocation.
 func checkKeys(keys [][]byte) protoblocktx.Status {
-	uniqueKeys := make(map[string]any, len(keys))
-	for _, k := range keys {
+	for i, k := range keys {
 		if len(k) == 0 {
 			return protoblocktx.Status_MALFORMED_EMPTY_KEY
 		}
-		uniqueKeys[string(k)] = nil
-	}
-	if len(uniqueKeys) != len(keys) {
-		return protoblocktx.Status_MALFORMED_DUPLICATE_KEY_IN_READ_WRITE_SET
+		for _, prev := range keys[:i] {
+			if string(k) == string(prev) {
+				return protoblocktx.Status_MALFORMED_DUPLICATE_KEY_IN_READ_WRITE_SET
+			}
+		}
 	}
 	return statusNotYetValidated
 }

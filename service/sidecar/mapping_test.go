@@ -8,6 +8,7 @@ package sidecar
 
 import (
 	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,9 +25,12 @@ func BenchmarkMapBlock(b *testing.B) {
 	txs := workload.GenerateTransactions(b, workload.DefaultProfile(8), b.N)
 	block := workload.MapToOrdererBlock(1, txs)
 
+	parser := newTxParser(runtime.GOMAXPROCS(0))
+	defer parser.close()
+
 	var txIDToHeight utils.SyncMap[string, types.Height]
 	b.ResetTimer()
-	mappedBlock, err := mapBlock(block, &txIDToHeight)
+	mappedBlock, err := mapBlock(block, &txIDToHeight, parser)
 	b.StopTimer()
 	require.NoError(b, err, "This can never occur unless there is a bug in the relay.")
 	require.NotNil(b, mappedBlock)
@@ -34,6 +38,10 @@ func BenchmarkMapBlock(b *testing.B) {
 
 func BenchmarkMapBlockBySize(b *testing.B) {
 	logging.SetupWithConfig(&logging.Config{Enabled: false})
+
+	parser := newTxParser(runtime.GOMAXPROCS(0))
+	defer parser.close()
+
 	for _, blockSize := range []int{100, 500, 1000, 5000} {
 		b.Run(fmt.Sprintf("txs=%d", blockSize), func(b *testing.B) {
 			txs := workload.GenerateTransactions(b, workload.DefaultProfile(8), blockSize)
@@ -41,7 +49,7 @@ func BenchmarkMapBlockBySize(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var txIDToHeight utils.SyncMap[string, types.Height]
-				_, err := mapBlock(block, &txIDToHeight)
+				_, err := mapBlock(block, &txIDToHeight, parser)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -74,7 +82,7 @@ func TestBlockMapping(t *testing.T) {
 	txIDToHeight.Store(lgTX.Id, types.Height{})
 
 	block := workload.MapToOrdererBlock(1, txs)
-	mappedBlock, err := mapBlock(block, &txIDToHeight)
+	mappedBlock, err := mapBlock(block, &txIDToHeight, nil)
 	require.NoError(t, err, "This can never occur unless there is a bug in the relay.")
 
 	require.NotNil(t, mappedBlock)
