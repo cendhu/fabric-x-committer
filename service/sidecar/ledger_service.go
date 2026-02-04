@@ -114,7 +114,11 @@ func (s *ledgerService) run(ctx context.Context, config *ledgerRunConfig) error 
 // blocks and Append (with fsync) every syncInterval blocks.
 func (s *ledgerService) appendBlock(block *common.Block) error {
 	if s.syncInterval <= 1 || (block.Header.Number+1)%s.syncInterval == 0 {
-		return s.ledger.Append(block)
+		if err := s.ledger.Append(block); err != nil {
+			return err
+		}
+		s.metrics.blockStoreSyncTotal.Inc()
+		return nil
 	}
 	return s.ledger.AppendNoSync(block)
 }

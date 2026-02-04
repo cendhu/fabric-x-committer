@@ -59,6 +59,7 @@ func TestLedgerService(t *testing.T) {
 	inputBlock <- blk0
 	ensureAtLeastHeight(t, ls, 1)
 	require.Equal(t, 1, test.GetIntMetricValue(t, metrics.blockHeight))
+	require.Equal(t, 1, test.GetIntMetricValue(t, metrics.blockStoreSyncTotal))
 	require.Greater(t, test.GetMetricValue(t, metrics.appendBlockToLedgerSeconds), float64(0))
 
 	receivedBlocksFromLedgerService := sidecarclient.StartSidecarClient(t.Context(), t, &sidecarclient.Parameters{
@@ -75,6 +76,7 @@ func TestLedgerService(t *testing.T) {
 
 	ensureAtLeastHeight(t, ls, 3)
 	require.Equal(t, 3, test.GetIntMetricValue(t, metrics.blockHeight))
+	require.Equal(t, 3, test.GetIntMetricValue(t, metrics.blockStoreSyncTotal))
 	for i := range 3 {
 		blk := <-receivedBlocksFromLedgerService
 		require.Equal(t, uint64(i), blk.Header.Number) //nolint:gosec

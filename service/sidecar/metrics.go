@@ -35,6 +35,7 @@ type perfMetrics struct {
 
 	appendBlockToLedgerSeconds prometheus.Histogram
 	blockHeight                prometheus.Gauge
+	blockStoreSyncTotal        prometheus.Counter
 }
 
 func newPerformanceMetrics() *perfMetrics {
@@ -110,6 +111,12 @@ func newPerformanceMetrics() *perfMetrics {
 			Subsystem: "ledger",
 			Name:      "block_height",
 			Help:      "The current block height of the ledger.",
+		}),
+		blockStoreSyncTotal: p.NewCounter(prometheus.CounterOpts{
+			Namespace: "sidecar",
+			Subsystem: "ledger",
+			Name:      "block_store_sync_total",
+			Help:      "Total number of fsync operations performed on the block store.",
 		}),
 	}
 }
