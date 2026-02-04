@@ -31,6 +31,7 @@ database:
     ca-cert-path: {{ .DB.TLS.CACertPath }}
   max-connections: 10
   min-connections: 5
+  split-into-tablets: {{ .DB.SplitIntoTablets | default 0 }}
   retry:
     max-elapsed-time: 1h
 

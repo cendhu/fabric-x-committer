@@ -28,6 +28,9 @@ const (
 	// nsIDTemplatePlaceholder is used as a template placeholder for SQL queries.
 	nsIDTemplatePlaceholder = "${NAMESPACE_ID}"
 
+	// splitClausePlaceholder is used as a template placeholder for the SPLIT INTO clause.
+	splitClausePlaceholder = "${SPLIT_CLAUSE}"
+
 	// tableNameTempl is the template for the table name for each namespace.
 	tableNameTempl = "ns_" + nsIDTemplatePlaceholder
 )
@@ -71,12 +74,13 @@ func NewDatabasePool(ctx context.Context, config *DatabaseConfig) (*pgxpool.Pool
 // TODO: merge this file with database.go.
 func (db *database) setupSystemTablesAndNamespaces(ctx context.Context) error {
 	logger.Info("Created tx status table, metadata table, and its methods.")
-	if execErr := db.retry.ExecuteSQL(ctx, db.pool, dbInitSQLStmt); execErr != nil {
+	initSQL := resolveSplitClause(dbInitSQLStmt, db.splitClause)
+	if execErr := db.retry.ExecuteSQL(ctx, db.pool, initSQL); execErr != nil {
 		return fmt.Errorf("failed to create system tables and functions: %w", execErr)
 	}
 
 	for _, nsID := range systemNamespaces {
-		execErr := createNsTables(nsID, func(q string) error {
+		execErr := createNsTables(nsID, db.splitClause, func(q string) error {
 			return db.retry.ExecuteSQL(ctx, db.pool, q)
 		})
 		if execErr != nil {
@@ -87,13 +91,18 @@ func (db *database) setupSystemTablesAndNamespaces(ctx context.Context) error {
 	return nil
 }
 
-func createNsTables(nsID string, queryFunc func(q string) error) error {
-	query := FmtNsID(createNamespaceSQLStmt, nsID)
+func createNsTables(nsID, splitClause string, queryFunc func(q string) error) error {
+	query := resolveSplitClause(FmtNsID(createNamespaceSQLStmt, nsID), splitClause)
 	if err := queryFunc(query); err != nil {
 		return errors.Wrapf(err, "failed to create table and functions for namespace [%s] with query [%s]",
 			nsID, query)
 	}
 	return nil
+}
+
+// resolveSplitClause replaces the split clause placeholder in SQL with the actual clause.
+func resolveSplitClause(sql, splitClause string) string {
+	return strings.ReplaceAll(sql, splitClausePlaceholder, splitClause)
 }
 
 // FmtNsID replaces the namespace placeholder with the namespace ID in an SQL template string.

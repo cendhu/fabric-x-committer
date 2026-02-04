@@ -48,9 +48,10 @@ var ErrMetadataEmpty = errors.New("metadata value is empty")
 type (
 	// database handles the database operations.
 	database struct {
-		pool    *pgxpool.Pool
-		metrics *perfMetrics
-		retry   *connection.RetryProfile
+		pool        *pgxpool.Pool
+		metrics     *perfMetrics
+		retry       *connection.RetryProfile
+		splitClause string
 	}
 
 	// keyToVersion is a map from key to version.
@@ -88,10 +89,16 @@ func newDatabase(ctx context.Context, config *DatabaseConfig, metrics *perfMetri
 		}
 	}()
 
+	var splitClause string
+	if config.SplitIntoTablets > 0 {
+		splitClause = fmt.Sprintf("SPLIT INTO %d TABLETS", config.SplitIntoTablets)
+	}
+
 	return &database{
-		pool:    pool,
-		metrics: metrics,
-		retry:   config.Retry,
+		pool:        pool,
+		metrics:     metrics,
+		retry:       config.Retry,
+		splitClause: splitClause,
 	}, nil
 }
 
@@ -258,7 +265,7 @@ func (db *database) writeStatesByGroup(
 		return conflicts, nil, nil
 	}
 
-	if err = createTablesAndFunctionsForNamespaces(ctx, tx, states.newWrites[types.MetaNamespaceID]); err != nil {
+	if err = createTablesAndFunctionsForNamespaces(ctx, tx, states.newWrites[types.MetaNamespaceID], db.splitClause); err != nil {
 		return nil, nil, fmt.Errorf("failed to create tables and functions for new namespaces: %w", err)
 	}
 
@@ -401,7 +408,7 @@ func (db *database) updateStates(ctx context.Context, tx pgx.Tx, nsToWrites name
 	return nil
 }
 
-func createTablesAndFunctionsForNamespaces(ctx context.Context, tx pgx.Tx, newNs *namespaceWrites) error {
+func createTablesAndFunctionsForNamespaces(ctx context.Context, tx pgx.Tx, newNs *namespaceWrites, splitClause string) error {
 	if newNs == nil {
 		return nil
 	}
@@ -411,7 +418,7 @@ func createTablesAndFunctionsForNamespaces(ctx context.Context, tx pgx.Tx, newNs
 
 		tableName := TableName(nsID)
 		logger.Infof("Creating table [%s] and required functions for namespace [%s]", tableName, ns)
-		err := createNsTables(nsID, func(q string) error {
+		err := createNsTables(nsID, splitClause, func(q string) error {
 			_, execErr := tx.Exec(ctx, q)
 			return execErr
 		})

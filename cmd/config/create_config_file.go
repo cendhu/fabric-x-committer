@@ -72,11 +72,12 @@ type (
 
 	// DatabaseConfig represents the used DB.
 	DatabaseConfig struct {
-		Name        string
-		Password    string
-		LoadBalance bool
-		Endpoints   []*connection.Endpoint
-		TLS         dbconn.DatabaseTLSConfig
+		Name             string
+		Password         string
+		LoadBalance      bool
+		Endpoints        []*connection.Endpoint
+		TLS              dbconn.DatabaseTLSConfig
+		SplitIntoTablets int
 	}
 )
 
