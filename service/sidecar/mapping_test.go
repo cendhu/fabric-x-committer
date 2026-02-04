@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package sidecar
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -29,6 +30,24 @@ func BenchmarkMapBlock(b *testing.B) {
 	b.StopTimer()
 	require.NoError(b, err, "This can never occur unless there is a bug in the relay.")
 	require.NotNil(b, mappedBlock)
+}
+
+func BenchmarkMapBlockBySize(b *testing.B) {
+	logging.SetupWithConfig(&logging.Config{Enabled: false})
+	for _, blockSize := range []int{100, 500, 1000, 5000} {
+		b.Run(fmt.Sprintf("txs=%d", blockSize), func(b *testing.B) {
+			txs := workload.GenerateTransactions(b, workload.DefaultProfile(8), blockSize)
+			block := workload.MapToOrdererBlock(1, txs)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				var txIDToHeight utils.SyncMap[string, types.Height]
+				_, err := mapBlock(block, &txIDToHeight)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }
 
 func TestBlockMapping(t *testing.T) {

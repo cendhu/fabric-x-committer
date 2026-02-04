@@ -80,6 +80,7 @@ func mapBlock(block *common.Block, txIDToHeight *utils.SyncMap[string, types.Hei
 		},
 		txIDToHeight: txIDToHeight,
 	}
+
 	for msgIndex, msg := range block.Data.Data {
 		logger.Debugf("Mapping transaction [blk,tx] = [%d,%d]", blockNumber, msgIndex)
 		err := mappedBlock.mapMessage(uint32(msgIndex), msg) //nolint:gosec // int -> uint32.
@@ -92,62 +93,64 @@ func mapBlock(block *common.Block, txIDToHeight *utils.SyncMap[string, types.Hei
 }
 
 func (b *blockMappingResult) mapMessage(msgIndex uint32, msg []byte) error {
-	data, hdr, envErr := serialization.UnwrapEnvelope(msg)
+	envHdr, envErr := serialization.UnwrapEnvelopeLite(msg)
 	if envErr != nil {
-		return b.rejectNonDBStatusTx(msgIndex, hdr, protoblocktx.Status_MALFORMED_BAD_ENVELOPE, envErr.Error())
+		return b.rejectNonDBStatusTx(msgIndex, "", 0, protoblocktx.Status_MALFORMED_BAD_ENVELOPE, envErr.Error())
 	}
-	if hdr.TxId == "" || !utf8.ValidString(hdr.TxId) {
-		return b.rejectNonDBStatusTx(msgIndex, hdr, protoblocktx.Status_MALFORMED_MISSING_TX_ID, "no TX ID")
+	txID := envHdr.TxId
+	headerType := envHdr.HeaderType
+	if txID == "" || !utf8.ValidString(txID) {
+		return b.rejectNonDBStatusTx(msgIndex, txID, headerType, protoblocktx.Status_MALFORMED_MISSING_TX_ID, "no TX ID")
 	}
 
-	switch common.HeaderType(hdr.Type) {
+	switch common.HeaderType(headerType) {
 	default:
-		return b.rejectTx(msgIndex, hdr, protoblocktx.Status_MALFORMED_UNSUPPORTED_ENVELOPE_PAYLOAD, "message type")
+		return b.rejectTx(msgIndex, txID, headerType, protoblocktx.Status_MALFORMED_UNSUPPORTED_ENVELOPE_PAYLOAD, "message type")
 	case common.HeaderType_CONFIG:
 		_, err := policy.ParsePolicyFromConfigTx(msg)
 		if err != nil {
-			return b.rejectTx(msgIndex, hdr, protoblocktx.Status_MALFORMED_CONFIG_TX_INVALID, err.Error())
+			return b.rejectTx(msgIndex, txID, headerType, protoblocktx.Status_MALFORMED_CONFIG_TX_INVALID, err.Error())
 		}
 		b.isConfig = true
-		return b.appendTx(msgIndex, hdr, configTx(msg))
+		return b.appendTx(msgIndex, txID, headerType, configTx(msg))
 	case common.HeaderType_MESSAGE:
-		tx, err := serialization.UnmarshalTx(data)
+		tx, err := serialization.UnmarshalTx(envHdr.Data)
 		if err != nil {
-			return b.rejectTx(msgIndex, hdr, protoblocktx.Status_MALFORMED_BAD_ENVELOPE_PAYLOAD, err.Error())
+			return b.rejectTx(msgIndex, txID, headerType, protoblocktx.Status_MALFORMED_BAD_ENVELOPE_PAYLOAD, err.Error())
 		}
 		if status := verifyTxForm(tx); status != statusNotYetValidated {
-			return b.rejectTx(msgIndex, hdr, status, "malformed tx")
+			return b.rejectTx(msgIndex, txID, headerType, status, "malformed tx")
 		}
-		return b.appendTx(msgIndex, hdr, tx)
+		return b.appendTx(msgIndex, txID, headerType, tx)
 	}
 }
 
-func (b *blockMappingResult) appendTx(txNum uint32, hdr *common.ChannelHeader, tx *protoblocktx.Tx) error {
-	if idAlreadyExists, err := b.addTxIDMapping(txNum, hdr); idAlreadyExists || err != nil {
+func (b *blockMappingResult) appendTx(txNum uint32, txID string, headerType int32, tx *protoblocktx.Tx) error {
+	if idAlreadyExists, err := b.addTxIDMapping(txNum, txID, headerType); idAlreadyExists || err != nil {
 		return err
 	}
 	b.block.Txs = append(b.block.Txs, &protocoordinatorservice.Tx{
-		Ref:     types.TxRef(hdr.TxId, b.blockNumber, txNum),
+		Ref:     types.TxRef(txID, b.blockNumber, txNum),
 		Content: tx,
 	})
-	debugTx(hdr, "included: %s", hdr.TxId)
+	debugTx(txID, headerType, "included: %s", txID)
 	return nil
 }
 
 func (b *blockMappingResult) rejectTx(
-	txNum uint32, hdr *common.ChannelHeader, status protoblocktx.Status, reason string,
+	txNum uint32, txID string, headerType int32, status protoblocktx.Status, reason string,
 ) error {
 	if !IsStatusStoredInDB(status) {
-		return b.rejectNonDBStatusTx(txNum, hdr, status, reason)
+		return b.rejectNonDBStatusTx(txNum, txID, headerType, status, reason)
 	}
-	if idAlreadyExists, err := b.addTxIDMapping(txNum, hdr); idAlreadyExists || err != nil {
+	if idAlreadyExists, err := b.addTxIDMapping(txNum, txID, headerType); idAlreadyExists || err != nil {
 		return err
 	}
 	b.block.Rejected = append(b.block.Rejected, &protocoordinatorservice.TxStatusInfo{
-		Ref:    types.TxRef(hdr.TxId, b.blockNumber, txNum),
+		Ref:    types.TxRef(txID, b.blockNumber, txNum),
 		Status: status,
 	})
-	debugTx(hdr, "rejected: %s (%s)", &status, reason)
+	debugTx(txID, headerType, "rejected: %s (%s)", &status, reason)
 	return nil
 }
 
@@ -155,7 +158,7 @@ func (b *blockMappingResult) rejectTx(
 // Namely, statuses for cases where we don't have a TX ID, or there is a TX ID duplication.
 // For such cases, no notification will be given by the notification service.
 func (b *blockMappingResult) rejectNonDBStatusTx(
-	txNum uint32, hdr *common.ChannelHeader, status protoblocktx.Status, reason string,
+	txNum uint32, txID string, headerType int32, status protoblocktx.Status, reason string,
 ) error {
 	if IsStatusStoredInDB(status) {
 		// This can never occur unless there is a bug in the relay.
@@ -165,17 +168,17 @@ func (b *blockMappingResult) rejectNonDBStatusTx(
 	if err != nil {
 		return err
 	}
-	debugTx(hdr, "excluded: %s (%s)", &status, reason)
+	debugTx(txID, headerType, "excluded: %s (%s)", &status, reason)
 	return nil
 }
 
-func (b *blockMappingResult) addTxIDMapping(txNum uint32, hdr *common.ChannelHeader) (idAlreadyExists bool, err error) {
-	_, idAlreadyExists = b.txIDToHeight.LoadOrStore(hdr.TxId, types.Height{
+func (b *blockMappingResult) addTxIDMapping(txNum uint32, txID string, headerType int32) (idAlreadyExists bool, err error) {
+	_, idAlreadyExists = b.txIDToHeight.LoadOrStore(txID, types.Height{
 		BlockNum: b.blockNumber,
 		TxNum:    txNum,
 	})
 	if idAlreadyExists {
-		err = b.rejectNonDBStatusTx(txNum, hdr, protoblocktx.Status_REJECTED_DUPLICATE_TX_ID, "duplicate tx")
+		err = b.rejectNonDBStatusTx(txNum, txID, headerType, protoblocktx.Status_REJECTED_DUPLICATE_TX_ID, "duplicate tx")
 	}
 	return idAlreadyExists, err
 }
@@ -210,17 +213,17 @@ func IsStatusStoredInDB(status protoblocktx.Status) bool {
 	}
 }
 
-func debugTx(channelHdr *common.ChannelHeader, format string, a ...any) {
+func debugTx(txID string, headerType int32, format string, a ...any) {
 	if logger.Level() > zapcore.DebugLevel {
 		return
 	}
 	hdr := "<no-header>"
-	txID := "<no-id>"
-	if channelHdr != nil {
-		hdr = common.HeaderType(channelHdr.Type).String()
-		txID = channelHdr.TxId
+	id := "<no-id>"
+	if txID != "" {
+		hdr = common.HeaderType(headerType).String()
+		id = txID
 	}
-	logger.Debugf("TX type [%s] ID [%s]: %s", hdr, txID, fmt.Sprintf(format, a...))
+	logger.Debugf("TX type [%s] ID [%s]: %s", hdr, id, fmt.Sprintf(format, a...))
 }
 
 func configTx(value []byte) *protoblocktx.Tx {
