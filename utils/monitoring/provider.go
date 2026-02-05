@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 
@@ -36,8 +37,12 @@ type Provider struct {
 var logger = logging.New("monitoring")
 
 // NewProvider creates a new prometheus metrics provider.
+// It registers Go runtime metrics (goroutines, GC, memory) and process metrics (CPU, memory, file descriptors).
 func NewProvider() *Provider {
-	return &Provider{registry: prometheus.NewRegistry()}
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(collectors.NewGoCollector())
+	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	return &Provider{registry: registry}
 }
 
 // StartPrometheusServer starts a prometheus server.
