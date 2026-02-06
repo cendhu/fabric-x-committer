@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	defaultYugabyteImage            = "yugabytedb/yugabyte:2.20.7.0-b58"
+	defaultYugabyteImage            = "yugabytedb/yugabyte:2025.2.0.1-b1"
 	defaultPostgresImage            = "postgres:16.9-alpine3.21"
 	defaultDBDeploymentTemplateName = test.DockerNamesPrefix + "_%s_unit_tests"
 
@@ -307,11 +307,41 @@ func (dc *DatabaseContainer) GetContainerConnectionDetails(
 	return connection.CreateEndpointHP(ipAddress, dc.DbPort.Port())
 }
 
+// ExposePort adds a host port mapping for the given container port (e.g. "5433")
+// with an auto-assigned host port. This allows the test client to reach the
+// container through a host-accessible address on all platforms.
+func (dc *DatabaseContainer) ExposePort(port string) {
+	p := docker.Port(port + "/tcp")
+	if dc.PortBinds == nil {
+		dc.PortBinds = make(map[docker.Port][]docker.PortBinding)
+	}
+	dc.PortBinds[p] = []docker.PortBinding{{HostIP: "0.0.0.0", HostPort: ""}}
+}
+
+// GetHostMappedEndpoint inspects the container and returns a host-accessible endpoint
+// using the auto-assigned host port mapping.
+func (dc *DatabaseContainer) GetHostMappedEndpoint(t *testing.T) *connection.Endpoint {
+	t.Helper()
+	container, err := dc.client.InspectContainerWithOptions(docker.InspectContainerOptions{
+		Context: t.Context(),
+		ID:      dc.containerID,
+	})
+	require.NoError(t, err)
+
+	bindings := container.NetworkSettings.Ports[dc.DbPort]
+	require.NotEmpty(t, bindings, "no host port mapping found for port %s", dc.DbPort)
+
+	hostIP := bindings[0].HostIP
+	if hostIP == "0.0.0.0" {
+		hostIP = "127.0.0.1"
+	}
+	return connection.CreateEndpointHP(hostIP, bindings[0].HostPort)
+}
+
 // streamLogs streams the container output to the requested stream.
 func (dc *DatabaseContainer) streamLogs(t *testing.T) {
 	t.Helper()
 	logOptions := docker.LogsOptions{
-		//nolint:usetesting //t.Context finished after the function call, which is causing an unexpected crash.
 		Context:      context.Background(),
 		Container:    dc.containerID,
 		Follow:       true,

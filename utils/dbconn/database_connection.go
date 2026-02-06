@@ -7,9 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 package dbconn
 
 import (
+	"context"
 	"fmt"
+	"net"
+	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/yugabyte/pgx/v4/pgxpool"
 
 	"github.com/hyperledger/fabric-x-committer/utils/connection"
 )
@@ -29,6 +33,13 @@ type (
 		EndpointsString string
 		LoadBalance     bool
 		TLS             DatabaseTLSConfig
+	}
+
+	// deadlineConn wraps a net.Conn with a per-read deadline so that reads
+	// on dead connections fail instead of hanging indefinitely.
+	deadlineConn struct {
+		net.Conn
+		readTimeout time.Duration
 	}
 )
 
@@ -58,3 +69,39 @@ func DataSourceName(d DataSourceNameParams) (string, error) {
 	}
 	return ret, nil
 }
+
+// ConfigurePoolConnHealth configures the pool to detect dead connections
+// within a bounded time.
+//
+// The read timeout is set to 60 seconds, which is more than enough for
+// read-set validation and commit operations. This can be made configurable
+// if needed.
+//
+// On macOS, Docker Desktop runs a userspace TCP proxy inside a Linux VM.
+// When a container dies the proxy does not immediately close forwarded
+// connections, so reads hang indefinitely. The deadlineConn wrapper ensures
+// stuck reads fail within the timeout, allowing the pool to replace them.
+// On Linux, reads already fail immediately via TCP RST when a node dies,
+// so the wrapper is harmless.
+func ConfigurePoolConnHealth(poolConfig *pgxpool.Config) {
+	dialer := &net.Dialer{
+		KeepAlive: 3 * time.Second,
+		Timeout:   10 * time.Second,
+	}
+	poolConfig.ConnConfig.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := dialer.DialContext(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		return &deadlineConn{Conn: conn, readTimeout: 60 * time.Second}, nil
+	}
+	poolConfig.HealthCheckPeriod = 5 * time.Second
+}
+
+func (c *deadlineConn) Read(b []byte) (int, error) {
+	if err := c.SetReadDeadline(time.Now().Add(c.readTimeout)); err != nil {
+		return 0, err
+	}
+	return c.Conn.Read(b)
+}
+
