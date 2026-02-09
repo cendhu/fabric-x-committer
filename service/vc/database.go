@@ -328,17 +328,29 @@ func (db *database) insertStates(
 		)
 	}()
 
-	conflicts := make(namespaceToReads)
+	batch := &pgx.Batch{}
+	nsOrder := make([]string, 0, len(nsToWrites))
 	for nsID, writes := range nsToWrites {
 		if writes.empty() {
 			continue
 		}
-
 		q := FmtNsID(insertNsStatesSQLTempl, nsID)
-		ret := tx.QueryRow(ctx, q, writes.keys, writes.values)
-		violating, err := readArrayResult[[]byte](ret)
+		batch.Queue(q, writes.keys, writes.values)
+		nsOrder = append(nsOrder, nsID)
+	}
+
+	if batch.Len() == 0 {
+		return nil, nil
+	}
+
+	br := tx.SendBatch(ctx, batch)
+	defer br.Close()
+
+	conflicts := make(namespaceToReads)
+	for _, nsID := range nsOrder {
+		violating, err := readArrayResult[[]byte](br.QueryRow())
 		if err != nil {
-			return nil, fmt.Errorf("failed to read result from query [%s]: %w", q, err)
+			return nil, fmt.Errorf("failed to read insert result for namespace [%s]: %w", nsID, err)
 		}
 
 		if len(violating) > 0 {
@@ -358,17 +370,32 @@ func (db *database) insertStates(
 
 func (db *database) updateStates(ctx context.Context, tx pgx.Tx, nsToWrites namespaceToWrites) error {
 	start := time.Now()
+
+	batch := &pgx.Batch{}
+	nsOrder := make([]string, 0, len(nsToWrites))
 	for nsID, writes := range nsToWrites {
 		if writes.empty() {
 			continue
 		}
-
 		query := FmtNsID(updateNsStatesSQLTempl, nsID)
-		_, err := tx.Exec(ctx, query, writes.keys, writes.values, writes.versions)
+		batch.Queue(query, writes.keys, writes.values, writes.versions)
+		nsOrder = append(nsOrder, nsID)
+	}
+
+	if batch.Len() == 0 {
+		return nil
+	}
+
+	br := tx.SendBatch(ctx, batch)
+	defer br.Close()
+
+	for _, nsID := range nsOrder {
+		_, err := br.Exec()
 		if err != nil {
-			return errors.Wrapf(err, "failed to execute query [%s]", query)
+			return errors.Wrapf(err, "failed to execute batched update for namespace [%s]", nsID)
 		}
 	}
+
 	promutil.Observe(db.metrics.databaseTxBatchCommitUpdateLatencySeconds, time.Since(start))
 
 	return nil
