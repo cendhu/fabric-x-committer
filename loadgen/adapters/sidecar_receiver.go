@@ -9,7 +9,9 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hyperledger/fabric-protos-go-apiv2/common"
@@ -109,6 +111,64 @@ func receiveCommittedBlock(
 	}
 }
 
+// parsedStatus holds the result of parsing a single envelope for TX status extraction.
+type parsedStatus struct {
+	txID       string
+	headerType int32
+	err        error
+}
+
+// minTxsForParallelStatusParse is the minimum number of transactions in a block
+// before parallel parsing is used. Below this threshold, the synchronization
+// overhead exceeds the parallelism benefit.
+const minTxsForParallelStatusParse = 200
+
+// parseStatusEnvelopes pre-parses all envelopes in parallel when the block is large enough.
+// UnwrapEnvelopeLite is a pure function with no shared mutable state, so it can safely
+// run concurrently across goroutines.
+func parseStatusEnvelopes(data [][]byte) []parsedStatus {
+	n := len(data)
+	results := make([]parsedStatus, n)
+
+	if n < minTxsForParallelStatusParse {
+		for i := range data {
+			hdr, err := serialization.UnwrapEnvelopeLite(data[i])
+			if err != nil {
+				results[i].err = err
+			} else {
+				results[i].txID = hdr.TxId
+				results[i].headerType = hdr.HeaderType
+			}
+		}
+		return results
+	}
+
+	workers := runtime.GOMAXPROCS(0)
+	chunkSize := (n + workers - 1) / workers
+	var wg sync.WaitGroup
+	for start := 0; start < n; start += chunkSize {
+		end := start + chunkSize
+		if end > n {
+			end = n
+		}
+		wg.Add(1)
+		go func(start, end int) {
+			defer wg.Done()
+			for i := start; i < end; i++ {
+				hdr, err := serialization.UnwrapEnvelopeLite(data[i])
+				if err != nil {
+					results[i].err = err
+				} else {
+					results[i].txID = hdr.TxId
+					results[i].headerType = hdr.HeaderType
+				}
+			}
+		}(start, end)
+	}
+	wg.Wait()
+	return results
+}
+
 // mapToStatusBatch creates a status batch from a given block.
 func mapToStatusBatch(block *common.Block) []metrics.TxStatus {
 	if block.Data == nil || len(block.Data.Data) == 0 {
@@ -124,14 +184,14 @@ func mapToStatusBatch(block *common.Block) []metrics.TxStatus {
 		block.Header.Number, len(block.Data.Data), len(statusCodes), recapStatusCodes(statusCodes),
 	)
 
+	parsed := parseStatusEnvelopes(block.Data.Data)
 	statusBatch := make([]metrics.TxStatus, 0, blockSize)
-	for i, data := range block.Data.Data {
-		_, channelHeader, err := serialization.UnwrapEnvelope(data)
-		if err != nil {
-			logger.Warnf("Failed to unmarshal envelope: %v", err)
+	for i, p := range parsed {
+		if p.err != nil {
+			logger.Warnf("Failed to unmarshal envelope: %v", p.err)
 			continue
 		}
-		if common.HeaderType(channelHeader.Type) == common.HeaderType_CONFIG {
+		if common.HeaderType(p.headerType) == common.HeaderType_CONFIG {
 			// We can ignore config transactions as we only count data transactions.
 			continue
 		}
@@ -140,7 +200,7 @@ func mapToStatusBatch(block *common.Block) []metrics.TxStatus {
 			status = protoblocktx.Status(statusCodes[i])
 		}
 		statusBatch = append(statusBatch, metrics.TxStatus{
-			TxID:   channelHeader.TxId,
+			TxID:   p.txID,
 			Status: status,
 		})
 	}
