@@ -56,68 +56,27 @@ type parsedEnvelope struct {
 	formStatus protoblocktx.Status
 }
 
-// parseJob is a unit of work sent to pre-created worker goroutines.
-// Each job processes a contiguous chunk of envelopes from a block.
-type parseJob struct {
-	data    [][]byte
-	results []parsedEnvelope
-	start   int
-	end     int
-	wg      *sync.WaitGroup
-}
-
-// txParser is a pool of pre-created worker goroutines that parse transaction
-// envelopes in parallel. Workers are created once and reused across all blocks,
-// avoiding repeated goroutine spawn/teardown overhead under sustained load.
-type txParser struct {
-	jobs    chan parseJob
-	workers int
-}
-
-func newTxParser(workers int) *txParser {
-	p := &txParser{
-		jobs:    make(chan parseJob),
-		workers: workers,
-	}
-	for range workers {
-		go func() {
-			for job := range p.jobs {
-				for i := job.start; i < job.end; i++ {
-					parseOneEnvelope(job.data[i], &job.results[i])
-				}
-				job.wg.Done()
-			}
-		}()
-	}
-	return p
-}
-
-func (p *txParser) close() {
-	close(p.jobs)
-}
-
 // minTxsForParallelParse is the minimum number of transactions in a block
 // before parallel parsing is used. Below this threshold, the synchronization
 // overhead exceeds the parallelism benefit.
 const minTxsForParallelParse = 200
 
 // parseBlockEnvelopes pre-parses all transaction envelopes.
-// When a txParser is provided and the block is large enough, it distributes the
-// work across pre-created worker goroutines. UnwrapEnvelopeLite, UnmarshalTx,
-// and verifyTxForm are all pure functions with no shared mutable state,
-// so they can safely run concurrently.
-func parseBlockEnvelopes(data [][]byte, parser *txParser) []parsedEnvelope {
+// When the block is large enough, it distributes the work across dynamically
+// created goroutines. UnwrapEnvelopeLite, UnmarshalTx, and verifyTxForm are
+// all pure functions with no shared mutable state, so they can safely run
+// concurrently.
+func parseBlockEnvelopes(data [][]byte, workers int) []parsedEnvelope {
 	n := len(data)
 	results := make([]parsedEnvelope, n)
 
-	if parser == nil || n < minTxsForParallelParse {
+	if workers <= 1 || n < minTxsForParallelParse {
 		for i := range data {
 			parseOneEnvelope(data[i], &results[i])
 		}
 		return results
 	}
 
-	workers := parser.workers
 	if workers > n {
 		workers = n
 	}
@@ -131,13 +90,12 @@ func parseBlockEnvelopes(data [][]byte, parser *txParser) []parsedEnvelope {
 			end = n
 		}
 		wg.Add(1)
-		parser.jobs <- parseJob{
-			data:    data,
-			results: results,
-			start:   start,
-			end:     end,
-			wg:      &wg,
-		}
+		go func() {
+			defer wg.Done()
+			for i := start; i < end; i++ {
+				parseOneEnvelope(data[i], &results[i])
+			}
+		}()
 	}
 	wg.Wait()
 	return results
@@ -158,7 +116,7 @@ func parseOneEnvelope(msg []byte, result *parsedEnvelope) {
 	result.formStatus = verifyTxForm(result.tx)
 }
 
-func mapBlock(block *common.Block, txIDToHeight *utils.SyncMap[string, types.Height], parser *txParser) (*blockMappingResult, error) {
+func mapBlock(block *common.Block, txIDToHeight *utils.SyncMap[string, types.Height], workers int) (*blockMappingResult, error) {
 	// Prepare block's metadata.
 	if block.Metadata == nil {
 		block.Metadata = &common.BlockMetadata{}
@@ -196,7 +154,7 @@ func mapBlock(block *common.Block, txIDToHeight *utils.SyncMap[string, types.Hei
 	}
 
 	// Stage 1: Parse all envelopes in parallel (pure computation, no shared state).
-	parsed := parseBlockEnvelopes(block.Data.Data, parser)
+	parsed := parseBlockEnvelopes(block.Data.Data, workers)
 
 	// Stage 2: Sequential mapping using pre-parsed results (shared state updates).
 	for msgIndex := range block.Data.Data {

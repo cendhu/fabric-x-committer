@@ -86,8 +86,7 @@ func (r *relay) run(ctx context.Context, config *relayRunConfig) error { //nolin
 	r.txIDToHeight.Clear()
 	r.waitingTxsSlots = utils.NewSlots(int64(config.waitingTxsLimit))
 
-	parser := newTxParser(runtime.GOMAXPROCS(0))
-	defer parser.close()
+	workers := runtime.GOMAXPROCS(0)
 
 	// Using the errgroup context for the stream ensures that we cancel the stream once one of the tasks fails.
 	// And we use the stream's context to ensure that if the stream is closed, we stop all the tasks.
@@ -107,7 +106,7 @@ func (r *relay) run(ctx context.Context, config *relayRunConfig) error { //nolin
 
 	mappedBlockQueue := make(chan *blockMappingResult, cap(r.incomingBlockToBeCommitted))
 	g.Go(func() error {
-		return r.preProcessBlock(sCtx, mappedBlockQueue, config.configUpdater, parser)
+		return r.preProcessBlock(sCtx, mappedBlockQueue, config.configUpdater, workers)
 	})
 	g.Go(func() error {
 		return r.sendBlocksToCoordinator(sCtx, mappedBlockQueue, stream)
@@ -132,7 +131,7 @@ func (r *relay) preProcessBlock(
 	ctx context.Context,
 	mappedBlockQueue chan<- *blockMappingResult,
 	configUpdater func(*common.Block),
-	parser *txParser,
+	workers int,
 ) error {
 	incomingBlockToBeCommitted := channel.NewReader(ctx, r.incomingBlockToBeCommitted)
 	queue := channel.NewWriter(ctx, mappedBlockQueue)
@@ -164,7 +163,7 @@ func (r *relay) preProcessBlock(
 		}
 
 		start := time.Now()
-		mappedBlock, err := mapBlock(block, &r.txIDToHeight, parser)
+		mappedBlock, err := mapBlock(block, &r.txIDToHeight, workers)
 		if err != nil {
 			// This can never occur unless there is a bug in the relay.
 			return err
