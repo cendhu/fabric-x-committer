@@ -210,10 +210,10 @@ func (cc *YugaClusterController) startNodes(ctx context.Context, t *testing.T) {
 		require.Equal(ct, expectedMasters, strings.Count(cc.listAllMasters(t), "ALIVE"))
 	}, time.Minute, time.Millisecond*100)
 
-	// Wait for each tserver to finish bootstrapping (syncing data to disk).
+	// Wait for each tserver to accept TCP connections on its YSQL port.
 	// Until this completes, the tserver is not ready to serve SQL queries.
 	for _, n := range cc.IterNodesByRole(TabletNode) {
-		n.EnsureNodeReadinessByLogs(t, dbtest.YugabyteTabletNodeReadinessOutput)
+		n.EnsureNodeReadiness(t)
 	}
 
 	// Wait for all tservers to register with the master via heartbeats.
@@ -292,6 +292,8 @@ func nodeConfig(t *testing.T, params nodeConfigParameters) []string {
 			"--master_addresses", params.masterAddresses,
 			// Desired number of replicas for system and user tables.
 			fmt.Sprintf("--replication_factor=%d", params.replicationFactor),
+			// Suppress INFO logs; show WARNING and above only.
+			"--minloglevel=1",
 		)
 	case TabletNode:
 		return append(nodeCommonConfig("yb-tserver", params.nodeName, tabletPort),
@@ -305,10 +307,11 @@ func nodeConfig(t *testing.T, params nodeConfigParameters) []string {
 			// port forwarding the traffic arrives on 0.0.0.0 inside the
 			// container, so we must listen on all interfaces.
 			"--pgsql_proxy_bind_address=0.0.0.0",
-			// glog (used by yb-tserver) defaults to writing logs to files.
-			// EnsureNodeReadinessByLogs reads container stdout, so we redirect
-			// logs to stderr which Docker captures.
+			// glog defaults to writing logs to files. Redirect to stderr
+			// so warnings/errors appear in Docker container logs for debugging.
 			"--logtostderr",
+			// Suppress INFO logs; show WARNING and above only.
+			"--minloglevel=1",
 			// Enable read committed isolation level. Without this,
 			// YugabyteDB falls back to repeatable read for read committed
 			// transactions, which changes concurrency behavior.

@@ -7,9 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package dbtest
 
 import (
-	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -36,15 +36,6 @@ const (
 	gb         = 1 << 30 // gb is the number of bytes needed to represent 1 GB.
 	memorySwap = -1      // memorySwap disable memory swaps (don't store data on disk)
 
-	// YugabytedReadinessOutput is the output indicating that a Yugabyted node is ready.
-	YugabytedReadinessOutput = "Data placement constraint successfully verified"
-	// YugabyteTabletNodeReadinessOutput is the output indicating that a yugabyte's tablet node is ready.
-	YugabyteTabletNodeReadinessOutput = "syncing data to disk ... ok"
-	// PostgresReadinesssOutput is the output indicating that a PostgreSQL node is ready.
-	PostgresReadinesssOutput = "database system is ready to accept connections"
-	// SecondaryPostgresNodeReadinessOutput is the output indicating that a secondary PostgreSQL node is ready.
-	SecondaryPostgresNodeReadinessOutput = "started streaming WAL from primary"
-
 	// Represents the required database TLS certificate files name.
 	yugabytePublicKeyFileName     = "node.db.crt"
 	yugabytePrivateKeyFileName    = "node.db.key"
@@ -64,7 +55,7 @@ var (
 		"ysql_max_connections=500," +
 			"tablet_replicas_per_gib_limit=4000," +
 			"yb_num_shards_per_tserver=1," +
-			"minloglevel=3," +
+			"minloglevel=1," +
 			"yb_enable_read_committed_isolation=true",
 	}
 
@@ -116,13 +107,17 @@ func (dc *DatabaseContainer) StartContainer(ctx context.Context, t *testing.T) {
 		return
 	}
 	require.NoError(t, err)
-
-	// Stream logs to stdout/stderr
-	go dc.streamLogs(t)
 }
 
 func (dc *DatabaseContainer) initDefaults(t *testing.T) { //nolint:gocognit
 	t.Helper()
+
+	// Normalize DbPort to include the protocol suffix required by Docker's
+	// port mapping API. Without "/tcp", lookups in NetworkSettings.Ports fail
+	// because Docker keys are always "<port>/tcp".
+	if dc.DbPort != "" && !strings.Contains(string(dc.DbPort), "/") {
+		dc.DbPort = docker.Port(string(dc.DbPort) + "/tcp")
+	}
 
 	switch dc.DatabaseType {
 	case YugaDBType:
@@ -176,7 +171,7 @@ func (dc *DatabaseContainer) initDefaults(t *testing.T) { //nolint:gocognit
 			dc.Cmd = []string{
 				// Configure PostgreSQL to run in secure mode
 				// and listen for incoming connections on a chosen port.
-				"-c", fmt.Sprintf("port=%s", dc.DbPort),
+				"-c", fmt.Sprintf("port=%s", dc.DbPort.Port()),
 				"-c", "ssl=on",
 				"-c", fmt.Sprintf("ssl_cert_file=%s", filepath.Join("/creds", postgresPublicKeyFileName)),
 				"-c", fmt.Sprintf("ssl_key_file=%s", filepath.Join("/creds", postgresPrivateKeyFileName)),
@@ -345,37 +340,6 @@ func (dc *DatabaseContainer) GetHostMappedEndpoint(t *testing.T) *connection.End
 	return connection.CreateEndpointHP(hostIP, bindings[0].HostPort)
 }
 
-// streamLogs streams the container output to the requested stream.
-func (dc *DatabaseContainer) streamLogs(t *testing.T) {
-	t.Helper()
-	logOptions := docker.LogsOptions{
-		Context:      context.Background(),
-		Container:    dc.containerID,
-		Follow:       true,
-		ErrorStream:  os.Stderr,
-		OutputStream: os.Stdout,
-		Stderr:       true,
-		Stdout:       true,
-	}
-
-	assert.NoError(t, dc.client.Logs(logOptions))
-}
-
-// GetContainerLogs return the output of the DatabaseContainer.
-func (dc *DatabaseContainer) GetContainerLogs(t *testing.T) string {
-	t.Helper()
-	var outputBuffer bytes.Buffer
-	require.NoError(t, dc.client.Logs(docker.LogsOptions{
-		Stdout:       true,
-		Stderr:       true,
-		Container:    dc.Name,
-		OutputStream: &outputBuffer,
-		ErrorStream:  &outputBuffer,
-	}))
-
-	return outputBuffer.String()
-}
-
 // StopAndRemoveContainer stops and removes the db container from the docker engine.
 func (dc *DatabaseContainer) StopAndRemoveContainer(t *testing.T) {
 	t.Helper()
@@ -439,11 +403,18 @@ func (dc *DatabaseContainer) ExecuteCommand(t *testing.T, cmd []string) string {
 	return stdout.String()
 }
 
-// EnsureNodeReadinessByLogs checks the container's readiness by monitoring its logs and ensure its running correctly.
-func (dc *DatabaseContainer) EnsureNodeReadinessByLogs(t *testing.T, requiredOutput string) {
+// EnsureNodeReadiness checks the container's readiness by attempting
+// a TCP connection to its host-mapped database port. Unlike log-based
+// readiness, this approach is independent of log level and output format.
+func (dc *DatabaseContainer) EnsureNodeReadiness(t *testing.T) {
 	t.Helper()
+	ep := dc.GetHostMappedEndpoint(t)
+	addr := ep.Address()
 	require.EventuallyWithT(t, func(ct *assert.CollectT) {
-		output := dc.GetContainerLogs(t)
-		require.Contains(ct, output, requiredOutput)
+		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+		if !assert.NoError(ct, err) {
+			return
+		}
+		conn.Close()
 	}, 45*time.Second, 250*time.Millisecond)
 }
