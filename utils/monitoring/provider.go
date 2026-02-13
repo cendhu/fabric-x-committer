@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hyperledger/fabric-lib-go/common/flogging"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/hyperledger/fabric-x-committer/utils/connection"
-	"github.com/hyperledger/fabric-x-committer/utils/logging"
 )
 
 const (
@@ -35,7 +35,7 @@ type Provider struct {
 	url      string
 }
 
-var logger = logging.New("monitoring")
+var logger = flogging.MustGetLogger("monitoring")
 
 // NewProvider creates a new prometheus metrics provider.
 func NewProvider() *Provider {
