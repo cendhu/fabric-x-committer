@@ -22,9 +22,22 @@ SPDX-License-Identifier: Apache-2.0
 
 ## 1. Overview
 
+```mermaid
+flowchart LR
+    Orderer[Ordering Service] -->|ordered blocks| Sidecar
+    Sidecar -->|block stream| Coordinator
+    Coordinator -->|transaction statuses| Sidecar
+    Sidecar --> Store[(Local block store)]
+    Sidecar -->|committed blocks| BlockClients[Block clients]
+    Sidecar -->|status events| Subscribers[Notification subscribers]
+```
+
 The Sidecar is a middleware component designed to operate between an Ordering Service and the Coordinator component.
 Its primary function is to reliably manage the flow of blocks, ensuring they are fetched, validated, persisted, and
 delivered to downstream clients.
+
+
+This placement gives the committer one ingress and delivery boundary. Ordering-service connectivity, block relay, committed-block storage, and client notifications can recover independently from Coordinator, Verifier, and Validator-Committer internals.
 
 ## 2. Core Responsibilities
 

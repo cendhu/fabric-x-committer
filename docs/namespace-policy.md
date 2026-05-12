@@ -28,12 +28,28 @@ SPDX-License-Identifier: Apache-2.0
 
 ### What Are Namespace Policies?
 
+```mermaid
+flowchart LR
+    Tx[Transaction] --> Namespaces[Affected namespaces]
+    Namespaces --> Policy[Namespace policy]
+    Policy --> MSP[MSP rule]
+    Policy --> Threshold[Threshold rule]
+    MSP --> Verifier[Verifier]
+    Threshold --> Verifier
+    Verifier --> Status[Verification status]
+    Status --> Coordinator[Coordinator]
+```
+
+
 A namespace in Fabric-X is the unit of state isolation — analogous to a chaincode in Hyperledger Fabric.
 Every namespace must have a **namespace policy** that defines which identities are authorized to endorse
 state changes within that namespace. No transaction can modify a namespace's state without satisfying its policy.
 
 Namespace policies serve the same role as **endorsement policies** in Fabric: they specify the set of
 signatures required for a transaction to be considered valid at commit time.
+
+
+A transaction that touches multiple namespaces must satisfy the policy for each affected namespace. The Verifier evaluates those policies after ordering, and the committer records the resulting status so policy failures are visible as final transaction outcomes.
 
 Fabric-X supports two types of namespace policies:
 

@@ -11,6 +11,20 @@ The Fabric-X Committer implements the validation and commit stage of the Hyperle
 
 The system is built around six core services connected by gRPC streams and bounded channels:
 
+```mermaid
+flowchart LR
+    Orderer[Ordering Service] -->|ordered blocks| Sidecar
+    Sidecar -->|blocks| Coordinator
+    Coordinator -->|signature and policy work| Verifier
+    Coordinator -->|validation and commit work| VC[Validator-Committer]
+    VC --> DB[(Database Cluster)]
+    Query[Query Service] -->|read-only views| DB
+    Sidecar -->|blocks and notifications| Clients[Clients / Subscribers]
+```
+
+This view separates ingestion, orchestration, verification, durable commit, and reads. The Sidecar owns the boundary to the ordering service and clients, the Coordinator owns scheduling, Verifier services own endorsement-policy checks, Validator-Committer services own MVCC validation and status persistence, and the Query Service owns read-only access to committed state.
+
+
 ```
 Ordering Service
         │

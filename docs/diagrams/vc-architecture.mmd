@@ -1,0 +1,53 @@
+graph LR
+    subgraph "VC Service - Validator-Committer"
+        Input[TX Batch from Coordinator] --> Preparer[Preparer]
+        Preparer -->|Parsed TXs| Validator[Validator]
+        Validator -->|Valid TXs| Committer[Committer]
+        
+        subgraph "Preparer"
+            P1[Parse TX Envelope]
+            P2[Extract Reads/Writes]
+            P3[Group by Namespace]
+        end
+        
+        subgraph "Validator"
+            V1[MVCC Validation]
+            V2[Read Conflict Check]
+            V3[Version Comparison]
+        end
+        
+        subgraph "Committer"
+            C1[Database Transaction]
+            C2[Insert/Update States]
+            C3[TX Status Tracking]
+        end
+        
+        Validator -.->|Validate Reads| DB[(Database)]
+        Committer -->|Commit Writes| DB
+    end
+    
+    subgraph "Database Layer"
+        DB
+        SP1[validate_reads_ns_ID]
+        SP2[update_ns_ID]
+        SP3[insert_ns_ID]
+        SP4[insert_tx_status]
+        
+        T1[ns_namespace_id tables]
+        T2[tx_status table]
+        T3[metadata table]
+    end
+    
+    subgraph "Key Features"
+        F1[✓ Idempotent Operations]
+        F2[✓ Atomic Commits]
+        F3[✓ Retry Logic]
+        F4[✓ Conflict Detection]
+        F5[✓ Namespace Isolation]
+    end
+    
+    style Preparer fill:#b2f2bb
+    style Validator fill:#ffec99
+    style Committer fill:#d0bfff
+    style DB fill:#e7f5ff
+    style Input fill:#ffc9c9

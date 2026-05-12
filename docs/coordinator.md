@@ -23,10 +23,24 @@ SPDX-License-Identifier: Apache-2.0
 
 ## 1. Overview
 
+```mermaid
+flowchart TB
+    Block[Block from Sidecar] --> Graph[Dependency graph]
+    Graph --> Ready[Ready transactions]
+    Ready --> Verifier[Verifier services]
+    Verifier --> VC[Validator-Committer services]
+    VC --> Status[Final statuses]
+    Status --> Graph
+    Status --> Sidecar[Sidecar]
+```
+
 The Coordinator service acts as the central orchestrator of the transaction validation and commit pipeline. It sits between the
 Sidecar and a collection of specialized verification, validation and commit services. Its primary role is to manage the complex 
 flow of transactions, from initial receipt to final status reporting, by leveraging a transaction dependency graph to maximize 
 parallel processing while ensuring deterministic outcomes.
+
+
+The loop continues until every transaction in the block has a durable status. Status feedback updates the dependency graph, which can unblock later transactions whose conflicts depend on earlier outcomes.
 
 ## 2. Core Responsibilities
 

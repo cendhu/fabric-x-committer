@@ -1,0 +1,40 @@
+graph TB
+    subgraph "Coordinator Service"
+        Input[Blocks from Sidecar] --> DepGraph[Dependency Graph Manager]
+        DepGraph -->|Conflict-free TXs| SigVerifier[Signature Verifier Manager]
+        SigVerifier -->|Verified TXs| VCMgr[VC Manager]
+        VCMgr -->|TX Status| Output[Status to Sidecar]
+        VCMgr -.->|Validated TXs feedback| DepGraph
+        
+        subgraph "Dependency Graph Manager"
+            DG1[Detect Conflicts]
+            DG2[Build DAG]
+            DG3[Release Dep-Free TXs]
+        end
+        
+        subgraph "Signature Verifier Manager"
+            SV1[Parallel Verification]
+            SV2[Load Balancing]
+            SV3[Policy Checking]
+        end
+        
+        subgraph "VC Manager"
+            VC1[MVCC Validation]
+            VC2[Database Commit]
+            VC3[Status Tracking]
+        end
+    end
+    
+    subgraph "Channel Communication"
+        CH1[coordinatorToDepGraphTxs]
+        CH2[depGraphToSigVerifierFreeTxs]
+        CH3[sigVerifierToVCServiceValidatedTxs]
+        CH4[vcServiceToDepGraphValidatedTxs]
+        CH5[vcServiceToCoordinatorTxStatus]
+    end
+    
+    style DepGraph fill:#b2f2bb
+    style SigVerifier fill:#ffec99
+    style VCMgr fill:#ffc9c9
+    style Input fill:#a5d8ff
+    style Output fill:#a5d8ff

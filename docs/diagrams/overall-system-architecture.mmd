@@ -1,0 +1,75 @@
+graph TB
+    subgraph "Fabric-X Committer System"
+        Orderer[Fabric Ordering Service] -->|Blocks| Sidecar[Sidecar Service]
+        Sidecar -->|TX Batch| Coordinator[Coordinator Service]
+        Coordinator -->|Verify| Verifier[Verifier Service]
+        Coordinator -->|Validate| VC[VC Service]
+        VC -->|Commit| DB[(Database)]
+        Query[Query Service] -->|Query| DB
+        Clients[Application Clients] -->|Deliver| Sidecar
+        Coordinator -.->|TX Status| Sidecar
+        
+        subgraph "Sidecar"
+            SC1[Block Fetching]
+            SC2[TX Mapping]
+            SC3[Relay - 5 Goroutines]
+            SC4[Client Delivery]
+            SC5[Notifications]
+        end
+        
+        subgraph "Coordinator"
+            CO1[Dependency Graph]
+            CO2[Sig Verifier Manager]
+            CO3[VC Manager]
+            CO4[Pipeline Orchestration]
+        end
+        
+        subgraph "Verifier"
+            VE1[Parallel Signature Verification]
+            VE2[Policy Validation]
+            VE3[Worker Pool]
+        end
+        
+        subgraph "VC Service"
+            VC1[TX Preparation]
+            VC2[MVCC Validation]
+            VC3[Database Commit]
+            VC4[Status Tracking]
+        end
+        
+        subgraph "Query Service"
+            QS1[State Queries]
+            QS2[Range Queries]
+            QS3[History Queries]
+            QS4[Query Batching]
+        end
+        
+        subgraph "Database"
+            DB
+            DB1[ns_namespace_id tables]
+            DB2[tx_status table]
+            DB3[metadata table]
+            DB4[Stored Procedures]
+        end
+    end
+    
+    subgraph "Data Flow"
+        DF1[Orderer → Sidecar → Coordinator → Verifier + VC → Database]
+        DF2[Database → VC → Coordinator → Sidecar → Clients]
+    end
+    
+    subgraph "Key Patterns"
+        KP1[Pipeline Architecture]
+        KP2[Channel-Based Communication]
+        KP3[Parallel Processing]
+        KP4[Idempotent Operations]
+    end
+    
+    style Sidecar fill:#d0bfff
+    style Coordinator fill:#a5d8ff
+    style Verifier fill:#ffec99
+    style VC fill:#ffc9c9
+    style Query fill:#b2f2bb
+    style DB fill:#e7f5ff
+    style Orderer fill:#ffc9c9
+    style Clients fill:#fff3bf

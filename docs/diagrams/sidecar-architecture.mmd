@@ -1,0 +1,54 @@
+graph TB
+    subgraph "Sidecar Service - Block Delivery Middleware"
+        Orderer[Fabric Ordering Service] -->|Blocks| BlockFetcher[Block Fetcher]
+        BlockFetcher -->|Validated Blocks| Relay[Relay - 5 Goroutines]
+        
+        subgraph "Relay Components"
+            R1[1. preProcessBlock<br/>Map TXs, handle config]
+            R2[2. sendBlocksToCoordinator<br/>Forward to coordinator]
+            R3[3. receiveStatusFromCoordinator<br/>Get TX status]
+            R4[4. processStatusBatch<br/>Update tracking]
+            R5[5. setLastCommittedBlockNumber<br/>Sync state]
+        end
+        
+        Relay <-->|Bidirectional Stream| Coordinator[Coordinator Service]
+        Relay --> BlockDelivery[Block Delivery]
+        Relay --> Notifier[Notifier]
+        
+        BlockDelivery --> Clients[Application Clients]
+        Notifier -.->|TX Status Updates| Clients
+        
+        subgraph "Block Fetcher"
+            BF1[Deliver Stream]
+            BF2[Block Validation]
+            BF3[Order Enforcement]
+        end
+        
+        subgraph "Block Delivery"
+            BD1[Client Streams]
+            BD2[Block Filtering]
+            BD3[Status Updates]
+        end
+        
+        subgraph "Notifier"
+            N1[TX Subscriptions]
+            N2[Status Notifications]
+            N3[Event Broadcasting]
+        end
+    end
+    
+    subgraph "Key Features"
+        F1[✓ Bidirectional Streaming]
+        F2[✓ Config Block Handling]
+        F3[✓ TX ID Mapping]
+        F4[✓ Notification System]
+        F5[✓ Fabric Compatibility]
+    end
+    
+    style BlockFetcher fill:#b2f2bb
+    style Relay fill:#ffec99
+    style BlockDelivery fill:#a5d8ff
+    style Notifier fill:#ffc9c9
+    style Orderer fill:#ffc9c9
+    style Coordinator fill:#a5d8ff
+    style Clients fill:#e7f5ff

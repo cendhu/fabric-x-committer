@@ -23,6 +23,20 @@ The architecture achieves high throughput through a sophisticated pipelined desi
 
 ## 2. Architecture Diagram
 
+```mermaid
+flowchart LR
+    Orderer[Ordering Service] -->|ordered blocks| Sidecar
+    Sidecar -->|block stream| Coordinator
+    Coordinator -->|signature / policy checks| Verifier
+    Coordinator -->|MVCC validation + commit| VC[Validator-Committer]
+    VC -->|state + statuses| DB[(PostgreSQL / YugabyteDB)]
+    Query[Query Service] -->|read-only views| DB
+    Sidecar -->|committed blocks + notifications| Clients[Clients / Endorsers]
+```
+
+The committer pipeline starts when the Sidecar receives ordered blocks and ends when Validator-Committer records durable transaction statuses. Coordinator keeps block-order semantics while exposing parallel work to Verifier and Validator-Committer services. Query Service is intentionally outside the write path: it serves committed state and policy/configuration data from the database without participating in validation or commit.
+
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Ordering Service                         │

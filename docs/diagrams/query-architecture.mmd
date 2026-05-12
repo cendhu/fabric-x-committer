@@ -1,0 +1,46 @@
+graph TB
+    subgraph "Query Service - State Query API"
+        Input[Query from Clients] --> GRPCServer[gRPC Server]
+        GRPCServer --> Batcher[Query Batcher]
+        
+        subgraph "Query Batcher"
+            B1[Accumulate Queries]
+            B2[Batch Similar Queries]
+            B3[Execute Batch]
+            B4[Distribute Results]
+            
+            BW[Batch Window<br/>Query 1 t=0ms<br/>Query 2 t=5ms<br/>Query 3 t=8ms<br/>Execute at t=10ms]
+        end
+        
+        Batcher -->|Batched Query| DB[(Database)]
+        
+        subgraph "Database Operations"
+            DB
+            Q1[GetState - Single key]
+            Q2[GetStateByRange - Range scan]
+            Q3[GetStateByPartialCompositeKey - Prefix]
+            Q4[GetHistoryForKey - History]
+            
+            T1[Read from ns_namespace_id tables]
+        end
+        
+        subgraph "Optimizations"
+            O1[Reduces DB Round-trips]
+            O2[Improves Throughput]
+            O3[Maintains Low Latency]
+            O4[Handles Concurrent Requests]
+        end
+    end
+    
+    subgraph "Key Features"
+        F1[✓ Query Batching]
+        F2[✓ Read-Only]
+        F3[✓ Namespace Aware]
+        F4[✓ Low Latency]
+    end
+    
+    style GRPCServer fill:#b2f2bb
+    style Batcher fill:#ffec99
+    style DB fill:#e7f5ff
+    style Input fill:#a5d8ff
+    style BW fill:#fff3bf

@@ -1,0 +1,51 @@
+graph TB
+    subgraph "Verifier Service - Signature Verification"
+        Input[TX Batch from Coordinator] --> GRPCServer[gRPC Server]
+        GRPCServer --> ParallelExecutor[Parallel Executor]
+        
+        subgraph "Parallel Executor - Worker Pool"
+            W1[Worker 1<br/>Verify TX 1, 4, 7...]
+            W2[Worker 2<br/>Verify TX 2, 5, 8...]
+            W3[Worker N<br/>Verify TX 3, 6, 9...]
+            
+            WP1[Configurable Worker Count]
+            WP2[Concurrent Verification]
+            WP3[Load Distribution]
+            WP4[Result Aggregation]
+        end
+        
+        ParallelExecutor -.->|Policy Check| PolicyEngine[Policy Engine]
+        
+        subgraph "Policy Engine"
+            PE1[Endorsement Policy]
+            PE2[Signature Validation]
+            PE3[MSP Verification]
+        end
+        
+        subgraph "Verification Steps"
+            VS1[1. Parse TX Envelope]
+            VS2[2. Extract Signatures]
+            VS3[3. Verify Against Policy]
+            VS4[4. Return Validation Result]
+        end
+        
+        ParallelExecutor --> Output[Validated TXs to Coordinator]
+    end
+    
+    subgraph "Key Features"
+        F1[✓ Parallel Processing]
+        F2[✓ Stateless Design]
+        F3[✓ Simple Architecture]
+        F4[✓ Policy-Based]
+        F5[✓ High Throughput]
+        F6[✓ Load Balancing]
+    end
+    
+    style GRPCServer fill:#b2f2bb
+    style ParallelExecutor fill:#d0bfff
+    style PolicyEngine fill:#ffc9c9
+    style Input fill:#ffec99
+    style Output fill:#ffec99
+    style W1 fill:#e7f5ff
+    style W2 fill:#e7f5ff
+    style W3 fill:#e7f5ff

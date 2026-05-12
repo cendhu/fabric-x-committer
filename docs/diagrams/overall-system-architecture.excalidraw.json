@@ -1,0 +1,567 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "rectangle",
+      "version": 1,
+      "id": "system-main",
+      "x": 200,
+      "y": 50,
+      "width": 1200,
+      "height": 800,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "#f8f9fa",
+      "fillStyle": "solid",
+      "strokeWidth": 3,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "label": {
+        "text": "Fabric-X Committer System",
+        "fontSize": 28,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "top",
+        "fontWeight": "bold"
+      }
+    },
+    {
+      "type": "rectangle",
+      "version": 1,
+      "id": "orderer",
+      "x": 50,
+      "y": 350,
+      "width": 120,
+      "height": 100,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "#ffc9c9",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "label": {
+        "text": "Fabric\nOrdering\nService",
+        "fontSize": 14,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "type": "rectangle",
+      "version": 1,
+      "id": "sidecar-sys",
+      "x": 250,
+      "y": 150,
+      "width": 200,
+      "height": 500,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "#d0bfff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "label": {
+        "text": "Sidecar\n\n• Block fetching\n• TX mapping\n• Relay (5 goroutines)\n• Client delivery\n• Notifications",
+        "fontSize": 14,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "type": "rectangle",
+      "version": 1,
+      "id": "coordinator-sys",
+      "x": 500,
+      "y": 150,
+      "width": 200,
+      "height": 500,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "#a5d8ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "label": {
+        "text": "Coordinator\n\n• Dependency Graph\n• Signature Verifier\n  Manager\n• VC Manager\n• Pipeline orchestration",
+        "fontSize": 14,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "type": "rectangle",
+      "version": 1,
+      "id": "verifier-sys",
+      "x": 750,
+      "y": 150,
+      "width": 200,
+      "height": 200,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "#ffec99",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "label": {
+        "text": "Verifier\n(Multiple instances)\n\n• Parallel signature\n  verification\n• Policy validation\n• Worker pool",
+        "fontSize": 14,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "type": "rectangle",
+      "version": 1,
+      "id": "vc-sys",
+      "x": 750,
+      "y": 400,
+      "width": 200,
+      "height": 250,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "#ffc9c9",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "label": {
+        "text": "VC Service\n(Multiple instances)\n\n• TX preparation\n• MVCC validation\n• Database commit\n• Status tracking",
+        "fontSize": 14,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "type": "rectangle",
+      "version": 1,
+      "id": "query-sys",
+      "x": 1000,
+      "y": 400,
+      "width": 200,
+      "height": 250,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "#b2f2bb",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "label": {
+        "text": "Query Service\n\n• State queries\n• Range queries\n• History queries\n• Query batching",
+        "fontSize": 14,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "type": "rectangle",
+      "version": 1,
+      "id": "database-sys",
+      "x": 1000,
+      "y": 150,
+      "width": 350,
+      "height": 200,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "#e7f5ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "label": {
+        "text": "Database\n(PostgreSQL/YugabyteDB)\n\n• ns_<id> tables (per namespace)\n• tx_status table\n• metadata table\n• Stored procedures\n• MVCC validation",
+        "fontSize": 14,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "type": "rectangle",
+      "version": 1,
+      "id": "clients-sys",
+      "x": 50,
+      "y": 550,
+      "width": 120,
+      "height": 100,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "#fff3bf",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "label": {
+        "text": "Application\nClients\n\nSDK/Gateway",
+        "fontSize": 14,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "type": "arrow",
+      "version": 1,
+      "id": "arrow-sys-1",
+      "x": 180,
+      "y": 400,
+      "width": 60,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "startBinding": {
+        "elementId": "orderer",
+        "focus": 0,
+        "gap": 10
+      },
+      "endBinding": {
+        "elementId": "sidecar-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "points": [[0, 0], [60, 0]],
+      "lastCommittedPoint": [60, 0],
+      "label": {
+        "text": "Blocks",
+        "fontSize": 12,
+        "fontFamily": 1
+      }
+    },
+    {
+      "type": "arrow",
+      "version": 1,
+      "id": "arrow-sys-2",
+      "x": 460,
+      "y": 400,
+      "width": 30,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "startBinding": {
+        "elementId": "sidecar-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "endBinding": {
+        "elementId": "coordinator-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "points": [[0, 0], [30, 0]],
+      "lastCommittedPoint": [30, 0],
+      "label": {
+        "text": "TX Batch",
+        "fontSize": 12,
+        "fontFamily": 1
+      }
+    },
+    {
+      "type": "arrow",
+      "version": 1,
+      "id": "arrow-sys-3",
+      "x": 710,
+      "y": 250,
+      "width": 30,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "startBinding": {
+        "elementId": "coordinator-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "endBinding": {
+        "elementId": "verifier-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "points": [[0, 0], [30, 0]],
+      "lastCommittedPoint": [30, 0],
+      "label": {
+        "text": "Verify",
+        "fontSize": 12,
+        "fontFamily": 1
+      }
+    },
+    {
+      "type": "arrow",
+      "version": 1,
+      "id": "arrow-sys-4",
+      "x": 710,
+      "y": 525,
+      "width": 30,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "startBinding": {
+        "elementId": "coordinator-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "endBinding": {
+        "elementId": "vc-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "points": [[0, 0], [30, 0]],
+      "lastCommittedPoint": [30, 0],
+      "label": {
+        "text": "Validate",
+        "fontSize": 12,
+        "fontFamily": 1
+      }
+    },
+    {
+      "type": "arrow",
+      "version": 1,
+      "id": "arrow-sys-5",
+      "x": 960,
+      "y": 525,
+      "width": 30,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "startBinding": {
+        "elementId": "vc-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "endBinding": {
+        "elementId": "database-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "points": [[0, 0], [100, -275]],
+      "lastCommittedPoint": [100, -275],
+      "label": {
+        "text": "Commit",
+        "fontSize": 12,
+        "fontFamily": 1
+      }
+    },
+    {
+      "type": "arrow",
+      "version": 1,
+      "id": "arrow-sys-6",
+      "x": 1210,
+      "y": 525,
+      "width": 30,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "startBinding": {
+        "elementId": "query-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "endBinding": {
+        "elementId": "database-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "points": [[0, 0], [0, -165]],
+      "lastCommittedPoint": [0, -165],
+      "label": {
+        "text": "Query",
+        "fontSize": 12,
+        "fontFamily": 1
+      }
+    },
+    {
+      "type": "arrow",
+      "version": 1,
+      "id": "arrow-sys-7",
+      "x": 180,
+      "y": 600,
+      "width": 60,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "startBinding": {
+        "elementId": "clients-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "endBinding": {
+        "elementId": "sidecar-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "points": [[0, 0], [60, 0]],
+      "lastCommittedPoint": [60, 0],
+      "label": {
+        "text": "Deliver",
+        "fontSize": 12,
+        "fontFamily": 1
+      }
+    },
+    {
+      "type": "arrow",
+      "version": 1,
+      "id": "arrow-sys-8",
+      "x": 490,
+      "y": 450,
+      "width": 200,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "dashed",
+      "startBinding": {
+        "elementId": "coordinator-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "endBinding": {
+        "elementId": "sidecar-sys",
+        "focus": 0,
+        "gap": 10
+      },
+      "points": [[0, 0], [-200, 0]],
+      "lastCommittedPoint": [-200, 0],
+      "label": {
+        "text": "TX Status",
+        "fontSize": 12,
+        "fontFamily": 1
+      }
+    },
+    {
+      "type": "rectangle",
+      "version": 1,
+      "id": "legend",
+      "x": 250,
+      "y": 700,
+      "width": 1100,
+      "height": 120,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "#f8f9fa",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "label": {
+        "text": "Data Flow: Orderer → Sidecar → Coordinator → (Verifier + VC) → Database\nStatus Flow: Database → VC → Coordinator → Sidecar → Clients\n\nKey Patterns:\n• Pipeline Architecture - Linear flow through stages\n• Channel-Based Communication - Go channels for inter-service messaging\n• Parallel Processing - Dependency graph enables concurrent TX processing\n• Idempotent Operations - Safe retry on failures",
+        "fontSize": 14,
+        "fontFamily": 1,
+        "textAlign": "left",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "type": "text",
+      "version": 1,
+      "id": "title-sys",
+      "x": 600,
+      "y": 20,
+      "width": 400,
+      "height": 30,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "strokeStyle": "solid",
+      "text": "Overall System Architecture",
+      "fontSize": 20,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "top",
+      "fontWeight": "bold"
+    }
+  ],
+  "appState": {
+    "gridSize": 20,
+    "viewBackgroundColor": "#ffffff"
+  },
+  "files": {}
+}

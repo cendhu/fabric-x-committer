@@ -47,3 +47,6 @@ venv
 
 # MkDocs build output
 site/
+
+# Local git worktrees
+worktrees/

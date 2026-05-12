@@ -50,6 +50,21 @@ The Verification Service performs several key functions:
 
 ## 2. Architecture
 
+```mermaid
+flowchart TB
+    Coordinator -->|policy updates| Cache[Policy cache]
+    Coordinator -->|verification requests| Verify[Signature verification]
+    Cache --> Verify
+    Verify --> MSP[MSP policy evaluation]
+    Verify --> Threshold[Threshold rule check]
+    MSP --> Result[Verification status]
+    Threshold --> Result
+    Result --> Coordinator
+```
+
+Verifier separates CPU-oriented signature and policy work from database-oriented commit work. Coordinator supplies policy updates and transaction batches; Verifier evaluates the current namespace policy view and returns statuses that downstream services can record durably.
+
+
 ### Components
 
 The Verification Service consists of several key components:
