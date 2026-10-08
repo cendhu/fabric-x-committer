@@ -56,6 +56,12 @@ type (
 		// Used by the simple dependency graph.
 		waitForKeysCount uint64
 		waitingKeys      []*waiting
+
+		// Used by the forest dependency manager.
+		// forest is the forest this transaction belongs to.
+		forest *forest
+		// validated is set once the validation status of this transaction is received.
+		validated bool
 	}
 
 	// TxNodeBatch is a batch of transaction nodes.
