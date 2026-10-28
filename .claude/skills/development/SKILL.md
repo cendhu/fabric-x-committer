@@ -47,6 +47,13 @@ abstraction, stop:
 
 ## Comments explain *why*, not *what*
 
+Write comments in simple English with familiar words and clear, complete sentences.
+Do not squeeze an explanation into short sentences or fragments at the expense of
+clarity. Use enough words to explain the reasoning clearly. Avoid dramatic words,
+exaggeration, and theatrical phrasing; describe the behavior and its reason plainly.
+Keeping comments concise means removing unnecessary content, not compressing useful
+explanations until they are hard to follow.
+
 A comment earns its place only if it tells the reader something the code cannot: the
 reasoning behind a choice, a non-obvious invariant, a trade-off, an edge case that looks
 like a bug but isn't, or a pointer to *why* something is shaped the way it is. If a
